@@ -8,7 +8,7 @@ class BoardGamePicker {
         this.enablePlayDateFetching = true; // Can be disabled if BGG API is too slow/limited
         
         // App version - update this when making releases
-        this.version = '1.2.1';
+        this.version = '1.2.2';
         
         // BGG API endpoints
         this.BGG_API_BASE = 'https://boardgamegeek.com/xmlapi2';
@@ -433,8 +433,10 @@ class BoardGamePicker {
         const maxRetries = 3;
         const corsProxies = [
             'https://api.allorigins.win/get?url=',
-            'https://cors-anywhere.herokuapp.com/',
-            'https://api.codetabs.com/v1/proxy?quest='
+            'https://corsproxy.io/?',
+            'https://api.codetabs.com/v1/proxy/?quest=',
+            'https://cors.eu.org/',
+            'https://crossorigin.me/'
         ];
 
         for (let proxyIndex = 0; proxyIndex < corsProxies.length; proxyIndex++) {
@@ -447,8 +449,8 @@ class BoardGamePicker {
                 const response = await fetch(fullUrl, {
                     method: 'GET',
                     headers: {
-                        'Accept': 'application/json, text/plain, */*',
-                        'User-Agent': 'BoardGamePicker/1.2.0'
+                        'Accept': 'application/json, text/plain, */*'
+                        // Removed User-Agent header as it causes CORS issues with some proxies
                     },
                     // Add timeout to prevent hanging requests (with fallback for older browsers)
                     ...(typeof AbortSignal.timeout === 'function' ? { signal: AbortSignal.timeout(30000) } : {})
@@ -471,6 +473,7 @@ class BoardGamePicker {
                     try {
                         const jsonResponse = await response.json();
                         responseText = jsonResponse.contents;
+                        console.log('📦 AllOrigins JSON response parsed successfully');
                     } catch (e) {
                         console.log('⚠️ AllOrigins JSON parse failed, trying as text');
                         responseText = await response.text();
@@ -492,9 +495,12 @@ class BoardGamePicker {
             } catch (error) {
                 console.error(`❌ Proxy ${proxyIndex + 1} failed:`, error.message);
                 
-                // If this is a Content-Length error and we haven't tried all proxies, continue
+                // If this is a network/CORS error and we haven't tried all proxies, continue
                 if (error.message.includes('Content-Length') || 
                     error.message.includes('network response') ||
+                    error.message.includes('NetworkError') ||
+                    error.message.includes('CORS') ||
+                    error.message.includes('preflight') ||
                     error.message.includes('AbortError')) {
                     
                     if (proxyIndex < corsProxies.length - 1) {
@@ -510,6 +516,19 @@ class BoardGamePicker {
                         await new Promise(resolve => setTimeout(resolve, Math.pow(2, retryCount) * 1000));
                         return this.makeApiRequest(url, retryCount + 1);
                     } else {
+                        // Last resort: try a direct request as fallback
+                        console.log('🚨 All proxies failed, attempting direct request (will likely fail due to CORS)');
+                        try {
+                            const directResponse = await fetch(url);
+                            if (directResponse.ok) {
+                                const directText = await directResponse.text();
+                                console.log('🎉 Direct request succeeded unexpectedly!');
+                                return directText;
+                            }
+                        } catch (directError) {
+                            console.log('⚠️ Direct request failed as expected:', directError.message);
+                        }
+                        
                         throw new Error(`All CORS proxies failed after ${maxRetries} attempts. Latest error: ${error.message}`);
                     }
                 }
@@ -897,14 +916,39 @@ window.debugBGP = {
     testProxies: async () => {
         const app = window.boardGamePickerInstance;
         if (app) {
-            console.log('🔧 Testing all CORS proxies...');
+            console.log('🔧 Testing all CORS proxies individually...');
             const testUrl = 'https://boardgamegeek.com/xmlapi2/collection?username=Geekdo-BoardGameGeek&stats=1';
+            
+            // Test the full makeApiRequest function first
             try {
                 const result = await app.makeApiRequest(testUrl);
-                console.log('✅ Proxy test successful:', result.length, 'characters received');
+                console.log('✅ Overall proxy test successful:', result.length, 'characters received');
                 return true;
             } catch (error) {
-                console.error('❌ Proxy test failed:', error.message);
+                console.error('❌ Overall proxy test failed:', error.message);
+                console.log('🔍 Testing individual proxies for debugging...');
+                
+                // Test each proxy individually for debugging
+                const corsProxies = [
+                    'https://api.allorigins.win/get?url=',
+                    'https://corsproxy.io/?',
+                    'https://api.codetabs.com/v1/proxy/?quest=',
+                    'https://cors.eu.org/',
+                    'https://crossorigin.me/'
+                ];
+                
+                for (let i = 0; i < corsProxies.length; i++) {
+                    try {
+                        const proxy = corsProxies[i];
+                        const fullUrl = proxy + encodeURIComponent(testUrl);
+                        console.log(`Testing proxy ${i + 1}: ${proxy}`);
+                        const response = await fetch(fullUrl);
+                        console.log(`Proxy ${i + 1} status:`, response.status, response.statusText);
+                    } catch (proxyError) {
+                        console.log(`Proxy ${i + 1} failed:`, proxyError.message);
+                    }
+                }
+                
                 return false;
             }
         }
