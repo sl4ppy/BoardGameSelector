@@ -5,12 +5,16 @@ class BoardGamePicker {
         this.currentUsername = '';
         this.isLoading = false;
         
+        // App version - update this when making releases
+        this.version = '1.2.0';
+        
         // BGG API endpoints
         this.BGG_API_BASE = 'https://boardgamegeek.com/xmlapi2';
         this.CORS_PROXY = 'https://api.allorigins.win/raw?url=';
         
         this.initializeEventListeners();
         this.setupDeveloperPanel();
+        this.setupVersionDisplay();
         this.loadSavedData();
     }
 
@@ -87,6 +91,21 @@ class BoardGamePicker {
         }
     }
 
+    setupVersionDisplay() {
+        // Add version info to the footer
+        const footer = document.querySelector('.footer p');
+        if (footer) {
+            const versionSpan = document.createElement('span');
+            versionSpan.className = 'version-info';
+            versionSpan.innerHTML = ` • <strong>v${this.version}</strong>`;
+            footer.appendChild(versionSpan);
+        }
+
+        // Add version to window for debugging
+        window.boardGamePickerVersion = this.version;
+        console.log(`🎲 Board Game Picker v${this.version} initialized`);
+    }
+
     setupDeveloperPanel() {
         // Check if we're running locally (for development)
         const isLocalDevelopment = window.location.hostname === 'localhost' || 
@@ -139,7 +158,7 @@ class BoardGamePicker {
                 }
                 
                 devInfo.innerHTML = `
-                    <strong>Local Development Mode</strong><br>
+                    <strong>Local Development Mode</strong> <code>v${this.version}</code><br>
                     Cache: <code>${data.games.length} games</code> for <code>${data.username}</code><br>
                     Age: <code>${ageText}</code><br>
                     Status: <code>Persistent (never expires locally)</code><br>
@@ -147,14 +166,14 @@ class BoardGamePicker {
                 `;
             } catch (e) {
                 devInfo.innerHTML = `
-                    <strong>Local Development Mode</strong><br>
+                    <strong>Local Development Mode</strong> <code>v${this.version}</code><br>
                     Cache: <code>Invalid cache data</code><br>
                     Status: <code>Error parsing cache</code>
                 `;
             }
         } else {
             devInfo.innerHTML = `
-                <strong>Local Development Mode</strong><br>
+                <strong>Local Development Mode</strong> <code>v${this.version}</code><br>
                 Cache: <code>Empty</code><br>
                 Status: <code>No cached data</code><br>
                 Default user: <code>flapJ4cks</code><br>
@@ -204,11 +223,14 @@ class BoardGamePicker {
                 console.log('Username:', data.username);
                 console.log('Game Count:', data.games.length);
                 console.log('Cached:', new Date(data.timestamp));
+                console.log('Cache Version:', data.version || 'Legacy (pre-1.2.0)');
+                console.log('Current App Version:', this.version);
                 console.log('Games:', data.games);
                 console.log('Full Data:', data);
                 console.groupEnd();
                 
-                alert(`Cache data logged to console!\n\nUser: ${data.username}\nGames: ${data.games.length}\nCached: ${new Date(data.timestamp).toLocaleString()}\n\nCheck browser console (F12) for full details.`);
+                const versionInfo = data.version ? `\nCache Version: ${data.version}` : '\nCache Version: Legacy (pre-1.2.0)';
+                alert(`Cache data logged to console!\n\nUser: ${data.username}\nGames: ${data.games.length}\nCached: ${new Date(data.timestamp).toLocaleString()}${versionInfo}\n\nCheck browser console (F12) for full details.`);
             } catch (e) {
                 console.error('Error parsing cache data:', e);
                 alert('Error: Cache data is corrupted.');
@@ -271,7 +293,8 @@ class BoardGamePicker {
         const data = {
             username: this.currentUsername,
             games: this.games,
-            timestamp: Date.now()
+            timestamp: Date.now(),
+            version: this.version
         };
         localStorage.setItem('bgg-collection-data', JSON.stringify(data));
         
@@ -417,6 +440,30 @@ class BoardGamePicker {
             rating: parseFloat(item.querySelector('stats rating[value]')?.getAttribute('value') || '0'),
             numPlays: parseInt(item.querySelector('numplays')?.textContent || '0'),
         };
+
+        // Parse play history
+        const status = item.querySelector('status');
+        if (status) {
+            const lastModified = status.getAttribute('lastmodified');
+            if (lastModified) {
+                game.lastModified = new Date(lastModified);
+            }
+        }
+
+        // Parse comment for last play date (BGG sometimes includes this info in comments)
+        const comment = item.querySelector('comment');
+        if (comment) {
+            game.comment = comment.textContent;
+            // Try to extract last play date from comment if it exists
+            const playDateMatch = game.comment.match(/last played:?\s*(\d{4}-\d{2}-\d{2}|\d{1,2}\/\d{1,2}\/\d{4})/i);
+            if (playDateMatch) {
+                try {
+                    game.lastPlayDate = new Date(playDateMatch[1]);
+                } catch (e) {
+                    // If date parsing fails, ignore
+                }
+            }
+        }
 
         // Parse stats if available
         const stats = item.querySelector('stats');
@@ -571,6 +618,22 @@ class BoardGamePicker {
             game.minPlayers === game.maxPlayers ? game.minPlayers : `${game.minPlayers}-${game.maxPlayers}`;
         document.getElementById('gamePlayTime').textContent = `${game.playTime} min`;
         document.getElementById('gameComplexity').textContent = game.complexity.toFixed(1);
+        
+        // Update play history
+        document.getElementById('gameNumPlays').textContent = game.numPlays > 0 ? game.numPlays : 'Never played';
+        
+        // Format last played date
+        let lastPlayedText = 'Not tracked';
+        if (game.lastPlayDate) {
+            lastPlayedText = this.formatDateForDisplay(game.lastPlayDate);
+        } else if (game.lastModified && game.numPlays > 0) {
+            // Use last modified as fallback if we have plays but no specific play date
+            lastPlayedText = this.formatDateForDisplay(game.lastModified) + ' (approx)';
+        } else if (game.numPlays === 0) {
+            lastPlayedText = 'Never played';
+        }
+        document.getElementById('gameLastPlayed').textContent = lastPlayedText;
+        
         document.getElementById('bggLink').href = `https://boardgamegeek.com/boardgame/${game.id}`;
 
         // Handle image loading
@@ -599,6 +662,33 @@ class BoardGamePicker {
 
         // Scroll to the game card
         gameCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    formatDateForDisplay(date) {
+        if (!date || !(date instanceof Date) || isNaN(date)) {
+            return 'Unknown';
+        }
+
+        const now = new Date();
+        const diffTime = Math.abs(now - date);
+        const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+        
+        if (diffDays === 0) {
+            return 'Today';
+        } else if (diffDays === 1) {
+            return 'Yesterday';
+        } else if (diffDays < 7) {
+            return `${diffDays} days ago`;
+        } else if (diffDays < 30) {
+            const weeks = Math.floor(diffDays / 7);
+            return `${weeks} week${weeks > 1 ? 's' : ''} ago`;
+        } else if (diffDays < 365) {
+            const months = Math.floor(diffDays / 30);
+            return `${months} month${months > 1 ? 's' : ''} ago`;
+        } else {
+            const years = Math.floor(diffDays / 365);
+            return `${years} year${years > 1 ? 's' : ''} ago`;
+        }
     }
 
     showCollectionStatus(message, type) {

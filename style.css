@@ -534,6 +534,15 @@ body {
     color: white;
 }
 
+.version-info {
+    opacity: 0.7;
+    font-size: 0.85rem;
+}
+
+.version-info strong {
+    color: rgba(255, 255, 255, 0.9);
+}
+
 /* Responsive Design */
 @media (max-width: 768px) {
     .container {
