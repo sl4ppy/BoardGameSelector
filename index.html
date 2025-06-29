@@ -96,11 +96,61 @@
                     </div>
 
                     <div class="roll-section">
+                        <div class="weighting-options">
+                            <label class="filter-label">Selection Method</label>
+                            <div class="weight-buttons">
+                                <button id="weightRandom" class="weight-btn active" data-weight="random">
+                                    <span class="weight-icon">⚖️</span>
+                                    <span class="weight-text">Random</span>
+                                </button>
+                                <button id="weightRecency" class="weight-btn" data-weight="recency">
+                                    <span class="weight-icon">⏰</span>
+                                    <span class="weight-text">Favor Old</span>
+                                </button>
+                                <button id="weightUnplayed" class="weight-btn" data-weight="unplayed">
+                                    <span class="weight-icon">✨</span>
+                                    <span class="weight-text">Favor Unplayed</span>
+                                </button>
+                            </div>
+                            
+                            <div class="rating-option">
+                                <label class="rating-checkbox-wrapper">
+                                    <input type="checkbox" id="usePersonalRating" class="rating-checkbox">
+                                    <span class="rating-checkmark"></span>
+                                    <span class="rating-label">📊 Use personal rating when choosing a game</span>
+                                </label>
+                                <p class="rating-description">Factor in your personal rating for each game when applying weights</p>
+                                
+                                <div class="rating-slider-wrapper hidden" id="ratingSliderWrapper">
+                                    <label class="rating-slider-label">
+                                        ⭐ Minimum Personal Rating: <span id="ratingSliderValue">5</span>/10
+                                    </label>
+                                    <div class="rating-slider-container">
+                                        <span class="slider-min">1</span>
+                                        <input type="range" id="minPersonalRating" class="rating-slider" 
+                                               min="1" max="10" value="5" step="0.5">
+                                        <span class="slider-max">10</span>
+                                    </div>
+                                    <p class="rating-slider-description">Only consider games with this rating or higher</p>
+                                    
+                                    <div class="unrated-option">
+                                        <label class="unrated-checkbox-wrapper">
+                                            <input type="checkbox" id="includeUnrated" class="unrated-checkbox" checked>
+                                            <span class="unrated-checkmark"></span>
+                                            <span class="unrated-label">🔍 Include unrated games</span>
+                                        </label>
+                                        <p class="unrated-description">Include games you haven't rated yet in the selection</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
                         <button id="rollDice" class="roll-btn">
                             <span class="dice-icon">🎲</span>
                             <span class="btn-text">Roll the Dice!</span>
                         </button>
                         <div class="filtered-count" id="filteredCount"></div>
+                        <div class="weight-info" id="weightInfo"></div>
                     </div>
                 </div>
 
@@ -131,6 +181,14 @@
                                 <div class="detail-item">
                                     <span class="detail-label">Complexity:</span>
                                     <span id="gameComplexity" class="detail-value"></span>
+                                </div>
+                                <div class="detail-item">
+                                    <span class="detail-label">Your Rating:</span>
+                                    <span id="gamePersonalRating" class="detail-value"></span>
+                                </div>
+                                <div class="detail-item">
+                                    <span class="detail-label">BGG Rating:</span>
+                                    <span id="gameBggRating" class="detail-value"></span>
                                 </div>
                                 <div class="detail-item">
                                     <span class="detail-label">Plays:</span>

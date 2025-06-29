@@ -6,9 +6,18 @@ class BoardGamePicker {
         this.isLoading = false;
         this.playDataCache = new Map(); // Cache play data to avoid duplicate API calls
         this.enablePlayDateFetching = true; // Can be disabled if BGG API is too slow/limited
+        this.currentWeightingMethod = 'random'; // Default weighting method
+        this.usePersonalRating = false; // Whether to factor in personal ratings
+        this.minPersonalRating = 5; // Minimum personal rating for game selection
+        this.includeUnrated = true; // Whether to include games without personal ratings
+        
+        // Rate limiting to prevent API abuse
+        this.lastApiRequest = 0;
+        this.minimumApiInterval = 60000; // 1 minute between collection refreshes
+        this.rateLimitWarningShown = false;
         
         // App version - update this when making releases
-        this.version = '1.2.2';
+        this.version = '1.5.3';
         
         // BGG API endpoints
         this.BGG_API_BASE = 'https://boardgamegeek.com/xmlapi2';
@@ -36,6 +45,38 @@ class BoardGamePicker {
         // Roll dice functionality
         document.getElementById('rollDice').addEventListener('click', () => this.rollDice());
         document.getElementById('rollAgain').addEventListener('click', () => this.rollDice());
+
+        // Weighting button functionality
+        document.querySelectorAll('.weight-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => this.selectWeightingMethod(e.target.closest('.weight-btn')));
+        });
+
+        // Personal rating checkbox functionality
+        document.getElementById('usePersonalRating').addEventListener('change', (e) => {
+            this.usePersonalRating = e.target.checked;
+            this.toggleRatingSlider();
+            this.updateWeightInfo();
+            this.applyFilters(); // Re-apply filters when rating toggle changes
+            console.log(`📊 Personal rating weighting: ${this.usePersonalRating ? 'enabled' : 'disabled'}`);
+        });
+
+        // Personal rating slider functionality
+        document.getElementById('minPersonalRating').addEventListener('input', (e) => {
+            this.minPersonalRating = parseFloat(e.target.value);
+            document.getElementById('ratingSliderValue').textContent = this.minPersonalRating;
+            this.updateWeightInfo();
+            this.applyFilters(); // Re-apply filters when minimum rating changes
+            console.log(`📊 Minimum personal rating set to: ${this.minPersonalRating}`);
+        });
+
+        // Include unrated games checkbox functionality
+        document.getElementById('includeUnrated').addEventListener('change', (e) => {
+            this.includeUnrated = e.target.checked;
+            this.updateWeightInfo();
+            this.applyFilters(); // Re-apply filters when unrated inclusion changes
+            console.log(`🔍 Include unrated games: ${this.includeUnrated ? 'enabled' : 'disabled'}`);
+            console.log(`📊 Filtered games after unrated toggle: ${this.filteredGames.length}`);
+        });
 
         // Developer panel functionality (only works when panel is visible)
         document.getElementById('devClearCache')?.addEventListener('click', () => this.devClearCache());
@@ -119,6 +160,11 @@ class BoardGamePicker {
             devPanel.classList.remove('hidden');
             this.updateDevPanelInfo();
             
+            // Update dev panel periodically to show rate limit countdown
+            setInterval(() => {
+                this.updateDevPanelInfo();
+            }, 5000); // Update every 5 seconds
+            
             // Set default username for development
             const usernameInput = document.getElementById('bggUsername');
             if (!usernameInput.value) {
@@ -159,13 +205,25 @@ class BoardGamePicker {
                     ageText = `${ageHours} hour${ageHours !== 1 ? 's' : ''}`;
                 }
                 
+                const now = Date.now();
+                const timeSinceLastRequest = now - this.lastApiRequest;
+                const remainingCooldown = this.minimumApiInterval - timeSinceLastRequest;
+                let rateLimitStatus = '';
+                
+                if (this.lastApiRequest > 0 && remainingCooldown > 0) {
+                    const waitSeconds = Math.ceil(remainingCooldown / 1000);
+                    rateLimitStatus = `<br>Rate limit: <code style="color: #ef4444;">${waitSeconds}s cooldown</code>`;
+                } else if (this.lastApiRequest > 0) {
+                    rateLimitStatus = `<br>Rate limit: <code style="color: #10b981;">Ready to refresh</code>`;
+                }
+                
                 devInfo.innerHTML = `
                     <strong>Local Development Mode</strong> <code>v${this.version}</code><br>
                     Cache: <code>${data.games.length} games</code> for <code>${data.username}</code><br>
                     Play cache: <code>${this.playDataCache.size} entries</code><br>
                     Age: <code>${ageText}</code><br>
                     Status: <code>Persistent (never expires locally)</code><br>
-                    Default filter: <code>Owned games only</code>
+                    Default filter: <code>Owned games only</code>${rateLimitStatus}
                 `;
             } catch (e) {
                 devInfo.innerHTML = `
@@ -175,13 +233,25 @@ class BoardGamePicker {
                 `;
             }
         } else {
+            const now = Date.now();
+            const timeSinceLastRequest = now - this.lastApiRequest;
+            const remainingCooldown = this.minimumApiInterval - timeSinceLastRequest;
+            let rateLimitStatus = '';
+            
+            if (this.lastApiRequest > 0 && remainingCooldown > 0) {
+                const waitSeconds = Math.ceil(remainingCooldown / 1000);
+                rateLimitStatus = `<br>Rate limit: <code style="color: #ef4444;">${waitSeconds}s cooldown</code>`;
+            } else if (this.lastApiRequest > 0) {
+                rateLimitStatus = `<br>Rate limit: <code style="color: #10b981;">Ready to refresh</code>`;
+            }
+            
             devInfo.innerHTML = `
                 <strong>Local Development Mode</strong> <code>v${this.version}</code><br>
                 Cache: <code>Empty</code><br>
                 Play cache: <code>${this.playDataCache.size} entries</code><br>
                 Status: <code>No cached data</code><br>
                 Default user: <code>flapJ4cks</code><br>
-                Default filter: <code>Owned games only</code>
+                Default filter: <code>Owned games only</code>${rateLimitStatus}
             `;
         }
     }
@@ -210,9 +280,26 @@ class BoardGamePicker {
             return;
         }
         
-        if (confirm(`Force re-sync collection for ${this.currentUsername}? This will fetch fresh data from BGG.`)) {
+        // Check rate limiting for dev refresh too
+        const now = Date.now();
+        const timeSinceLastRequest = now - this.lastApiRequest;
+        const remainingCooldown = this.minimumApiInterval - timeSinceLastRequest;
+        
+        if (this.lastApiRequest > 0 && remainingCooldown > 0) {
+            const waitSeconds = Math.ceil(remainingCooldown / 1000);
+            alert(`⏳ Rate limiting active: Please wait ${waitSeconds} seconds before refreshing to avoid API blocks.\n\nToo many rapid requests can cause temporary bans from CORS proxies.`);
+            return;
+        }
+        
+        if (confirm(`Force re-sync collection for ${this.currentUsername}? This will fetch fresh data from BGG.\n\n⚠️ Note: Frequent refreshes can trigger rate limiting (1 minute cooldown).`)) {
             // Clear current cache
             localStorage.removeItem('bgg-collection-data');
+            this.playDataCache.clear(); // Also clear play data cache
+            this.games = [];
+            this.filteredGames = [];
+            document.getElementById('gameSection').classList.add('hidden');
+            document.getElementById('gameCard').classList.add('hidden');
+            
             // Trigger fresh fetch
             this.fetchUserCollection();
             console.log('🔄 Force refresh triggered by developer action');
@@ -318,7 +405,29 @@ class BoardGamePicker {
 
         if (this.isLoading) return;
 
+        // Check rate limiting
+        const now = Date.now();
+        const timeSinceLastRequest = now - this.lastApiRequest;
+        const remainingCooldown = this.minimumApiInterval - timeSinceLastRequest;
+        
+        if (this.lastApiRequest > 0 && remainingCooldown > 0) {
+            const waitMinutes = Math.ceil(remainingCooldown / 60000);
+            const waitSeconds = Math.ceil(remainingCooldown / 1000);
+            
+            let waitMessage;
+            if (waitMinutes >= 1) {
+                waitMessage = `⏳ Please wait ${waitMinutes} minute${waitMinutes > 1 ? 's' : ''} before refreshing your collection to avoid rate limiting`;
+            } else {
+                waitMessage = `⏳ Please wait ${waitSeconds} second${waitSeconds > 1 ? 's' : ''} before refreshing your collection to avoid rate limiting`;
+            }
+            
+            this.showCollectionStatus(waitMessage, 'error');
+            console.log(`🛑 Rate limit: ${remainingCooldown}ms remaining until next allowed request`);
+            return;
+        }
+
         this.isLoading = true;
+        this.lastApiRequest = now;
         this.currentUsername = username;
         this.toggleLoadingState(true);
         this.showCollectionStatus('🔄 Fetching your collection...', 'loading');
@@ -418,8 +527,13 @@ class BoardGamePicker {
                 errorMessage = `❌ Request timed out. BGG servers may be slow - please wait and try again.`;
             } else if (error.message.includes('202')) {
                 errorMessage = `❌ BGG is still processing your collection. Please wait a moment and try again.`;
-            } else if (error.message.includes('All CORS proxies failed')) {
-                errorMessage = `❌ Multiple network issues detected. Please check your connection and try again later.`;
+            } else if (error.message.includes('All CORS proxies failed') || error.message.includes('403') || error.message.includes('Forbidden')) {
+                // Likely rate limiting or proxy blocking
+                const waitMinutes = Math.ceil(this.minimumApiInterval / 60000);
+                errorMessage = `❌ API rate limit reached. Please wait ${waitMinutes} minute${waitMinutes > 1 ? 's' : ''} before trying again. Too many requests can cause temporary blocks.`;
+                
+                // Reset the cooldown to current time to enforce waiting
+                this.lastApiRequest = Date.now();
             }
             
             this.showCollectionStatus(errorMessage, 'error');
@@ -432,26 +546,33 @@ class BoardGamePicker {
     async makeApiRequest(url, retryCount = 0) {
         const maxRetries = 3;
         const corsProxies = [
-            'https://api.allorigins.win/get?url=',
-            'https://corsproxy.io/?',
-            'https://api.codetabs.com/v1/proxy/?quest=',
-            'https://cors.eu.org/',
-            'https://crossorigin.me/'
+            { url: 'https://api.allorigins.win/get?url=', name: 'AllOrigins' },
+            { url: 'https://thingproxy.freeboard.io/fetch/', name: 'ThingProxy' },
+            { url: 'https://api.codetabs.com/v1/proxy?quest=', name: 'CodeTabs' },
+            { url: 'https://corsproxy.io/?', name: 'CORSProxy.io' },
+            { url: 'https://cors-anywhere.herokuapp.com/', name: 'CORS-Anywhere' }
         ];
 
         for (let proxyIndex = 0; proxyIndex < corsProxies.length; proxyIndex++) {
             const proxy = corsProxies[proxyIndex];
-            const fullUrl = proxy + encodeURIComponent(url);
+            const fullUrl = proxy.url + encodeURIComponent(url);
             
             try {
-                console.log(`🌐 Attempt ${retryCount + 1}/${maxRetries} with proxy ${proxyIndex + 1}:`, fullUrl);
+                console.log(`🌐 Attempt ${retryCount + 1}/${maxRetries} with ${proxy.name}:`, fullUrl);
+                
+                // Different headers for different proxies
+                let headers = {
+                    'Accept': 'application/json, text/plain, */*'
+                };
+                
+                // Only add User-Agent for proxies that support it
+                if (!proxy.url.includes('allorigins.win')) {
+                    headers['User-Agent'] = `BoardGamePicker/${this.version}`;
+                }
                 
                 const response = await fetch(fullUrl, {
                     method: 'GET',
-                    headers: {
-                        'Accept': 'application/json, text/plain, */*'
-                        // Removed User-Agent header as it causes CORS issues with some proxies
-                    },
+                    headers: headers,
                     // Add timeout to prevent hanging requests (with fallback for older browsers)
                     ...(typeof AbortSignal.timeout === 'function' ? { signal: AbortSignal.timeout(30000) } : {})
                 });
@@ -468,15 +589,17 @@ class BoardGamePicker {
                 let responseText;
                 
                 // Handle different proxy response formats
-                if (proxy.includes('allorigins.win')) {
+                if (proxy.url.includes('allorigins.win')) {
                     // AllOrigins returns JSON with 'contents' field
+                    // Clone the response so we can read it multiple times if needed
+                    const responseClone = response.clone();
                     try {
                         const jsonResponse = await response.json();
                         responseText = jsonResponse.contents;
-                        console.log('📦 AllOrigins JSON response parsed successfully');
                     } catch (e) {
                         console.log('⚠️ AllOrigins JSON parse failed, trying as text');
-                        responseText = await response.text();
+                        // Use the cloned response to avoid "body already consumed" error
+                        responseText = await responseClone.text();
                     }
                 } else {
                     // Other proxies return raw text
@@ -493,44 +616,52 @@ class BoardGamePicker {
                 return responseText;
                 
             } catch (error) {
-                console.error(`❌ Proxy ${proxyIndex + 1} failed:`, error.message);
+                console.error(`❌ ${proxy.name} failed:`, error.message);
                 
-                // If this is a network/CORS error and we haven't tried all proxies, continue
-                if (error.message.includes('Content-Length') || 
-                    error.message.includes('network response') ||
-                    error.message.includes('NetworkError') ||
-                    error.message.includes('CORS') ||
-                    error.message.includes('preflight') ||
-                    error.message.includes('AbortError')) {
-                    
-                    if (proxyIndex < corsProxies.length - 1) {
-                        console.log('🔄 Trying next proxy...');
-                        continue;
-                    }
+                // Check if this error indicates rate limiting or temporary issues
+                const isRateLimited = error.message.includes('403') || 
+                                     error.message.includes('Forbidden') ||
+                                     error.message.includes('429') ||
+                                     error.message.includes('Too Many Requests');
+                
+                const isCorsIssue = error.message.includes('CORS') || 
+                                   error.message.includes('preflight') ||
+                                   error.message.includes('NetworkError');
+                
+                const isTemporaryError = error.message.includes('Content-Length') || 
+                                        error.message.includes('network response') ||
+                                        error.message.includes('AbortError') ||
+                                        error.message.includes('timeout');
+                
+                // Log the type of error for debugging
+                if (isRateLimited) {
+                    console.log('🚫 Rate limiting detected');
+                } else if (isCorsIssue) {
+                    console.log('🌐 CORS policy issue detected');
+                } else if (isTemporaryError) {
+                    console.log('⏳ Temporary network issue detected');
                 }
                 
-                // If we've tried all proxies and this is our last retry, throw the error
-                if (proxyIndex === corsProxies.length - 1) {
-                    if (retryCount < maxRetries - 1) {
-                        console.log(`🔄 Retrying in ${Math.pow(2, retryCount)} seconds...`);
-                        await new Promise(resolve => setTimeout(resolve, Math.pow(2, retryCount) * 1000));
-                        return this.makeApiRequest(url, retryCount + 1);
-                    } else {
-                        // Last resort: try a direct request as fallback
-                        console.log('🚨 All proxies failed, attempting direct request (will likely fail due to CORS)');
-                        try {
-                            const directResponse = await fetch(url);
-                            if (directResponse.ok) {
-                                const directText = await directResponse.text();
-                                console.log('🎉 Direct request succeeded unexpectedly!');
-                                return directText;
-                            }
-                        } catch (directError) {
-                            console.log('⚠️ Direct request failed as expected:', directError.message);
-                        }
-                        
-                        throw new Error(`All CORS proxies failed after ${maxRetries} attempts. Latest error: ${error.message}`);
+                // Continue to next proxy if available
+                if (proxyIndex < corsProxies.length - 1) {
+                    console.log('🔄 Trying next proxy...');
+                    continue;
+                }
+                
+                // If we've tried all proxies, decide whether to retry the whole sequence
+                if (retryCount < maxRetries - 1) {
+                    console.log(`🔄 Retrying in ${Math.pow(2, retryCount)} seconds...`);
+                    await new Promise(resolve => setTimeout(resolve, Math.pow(2, retryCount) * 1000));
+                    return this.makeApiRequest(url, retryCount + 1);
+                } else {
+                    // Provide a more helpful error message based on the type of failure
+                    let errorSummary = `All CORS proxies failed after ${maxRetries} attempts.`;
+                    if (isRateLimited) {
+                        errorSummary += ' Rate limiting detected - try again later.';
+                    } else if (isCorsIssue) {
+                        errorSummary += ' CORS policy issues detected.';
                     }
+                    throw new Error(`${errorSummary} Latest error: ${error.message}`);
                 }
             }
         }
@@ -547,7 +678,7 @@ class BoardGamePicker {
             yearPublished: item.querySelector('yearpublished')?.textContent || 'Unknown',
             owned: item.getAttribute('subtype') === 'boardgame' && item.querySelector('status[own="1"]') !== null,
             wishlist: item.querySelector('status[wishlist="1"]') !== null,
-            rating: parseFloat(item.querySelector('stats rating[value]')?.getAttribute('value') || '0'),
+            rating: parseFloat(item.querySelector('stats rating[value]')?.getAttribute('value') || '0'), // User's personal rating
             numPlays: parseInt(item.querySelector('numplays')?.textContent || '0'),
         };
 
@@ -561,6 +692,22 @@ class BoardGamePicker {
             game.maxPlayers = parseInt(stats.getAttribute('maxplayers') || '1');
             game.playTime = parseInt(stats.getAttribute('playingtime') || '0');
             game.complexity = parseFloat(stats.querySelector('rating[name="averageweight"] value')?.getAttribute('value') || '0');
+            
+            // Get BGG community average rating - the correct structure is stats > rating > average
+            const averageRating = stats.querySelector('rating average');
+            if (averageRating) {
+                game.bggRating = parseFloat(averageRating.getAttribute('value') || '0');
+            } else {
+                // Fallback: try alternative selector patterns
+                const ratingElement = stats.querySelector('rating[name="average"]');
+                if (ratingElement) {
+                    game.bggRating = parseFloat(ratingElement.getAttribute('value') || '0');
+                } else {
+                    // Last fallback: try Bayesian average (BGG Geek rating)
+                    const bayesAverage = stats.querySelector('rating bayesaverage');
+                    game.bggRating = bayesAverage ? parseFloat(bayesAverage.getAttribute('value') || '0') : 0;
+                }
+            }
         }
 
         return game;
@@ -655,6 +802,22 @@ class BoardGamePicker {
                 }
             }
 
+            // Unrated games filter (independent of personal rating system)
+            // Check for unrated games: rating is 0, null, undefined, NaN, or any other falsy value
+            const isUnrated = !game.rating || game.rating === 0 || isNaN(game.rating);
+            if (isUnrated && !this.includeUnrated) {
+                console.log(`🚫 Filtering out unrated game: ${game.name} (rating: ${game.rating})`);
+                return false;
+            }
+
+            // Personal rating filters (only apply if personal rating system is enabled)
+            if (this.usePersonalRating) {
+                // If game has a rating, check if it meets minimum threshold
+                if (game.rating > 0 && game.rating < this.minPersonalRating) {
+                    return false;
+                }
+            }
+
             return true;
         });
 
@@ -671,6 +834,104 @@ class BoardGamePicker {
             countElement.textContent = `${count} game${count === 1 ? '' : 's'} available`;
             countElement.style.color = '#6b7280';
         }
+        
+        // Update weight info
+        this.updateWeightInfo();
+    }
+
+    selectWeightingMethod(button) {
+        // Remove active class from all buttons
+        document.querySelectorAll('.weight-btn').forEach(btn => btn.classList.remove('active'));
+        
+        // Add active class to clicked button
+        button.classList.add('active');
+        
+        // Update current weighting method
+        this.currentWeightingMethod = button.dataset.weight;
+        
+        // Update weight info
+        this.updateWeightInfo();
+        
+        console.log(`🎯 Weighting method changed to: ${this.currentWeightingMethod}`);
+    }
+
+    toggleRatingSlider() {
+        const sliderWrapper = document.getElementById('ratingSliderWrapper');
+        if (this.usePersonalRating) {
+            sliderWrapper.classList.remove('hidden');
+            sliderWrapper.style.animation = 'fadeIn 0.3s ease-out';
+        } else {
+            sliderWrapper.classList.add('hidden');
+        }
+    }
+
+    updateWeightInfo() {
+        const weightInfo = document.getElementById('weightInfo');
+        const count = this.filteredGames.length;
+        
+        if (count === 0) {
+            weightInfo.textContent = '';
+            return;
+        }
+
+        let infoText = '';
+        switch (this.currentWeightingMethod) {
+            case 'random':
+                infoText = 'All games have equal chance of selection';
+                break;
+            case 'recency':
+                const avgDays = this.calculateAverageRecency();
+                infoText = avgDays >= 0 ? 
+                    `Games played longer ago are more likely to be selected (avg: ${avgDays} days)` :
+                    'Games with play history are more likely to be selected';
+                break;
+            case 'unplayed':
+                const unplayedCount = this.filteredGames.filter(g => g.numPlays === 0).length;
+                infoText = unplayedCount > 0 ? 
+                    `Unplayed games are strongly favored (${unplayedCount} unplayed)` :
+                    'No unplayed games available, using play recency';
+                break;
+        }
+        
+        // Add rating info
+        const ratedGames = this.filteredGames.filter(g => g.rating && g.rating > 0 && !isNaN(g.rating)).length;
+        const unratedGames = this.filteredGames.filter(g => !g.rating || g.rating === 0 || isNaN(g.rating)).length;
+        
+        if (this.usePersonalRating) {
+            // Personal rating system is enabled
+            const qualifyingRatedGames = this.filteredGames.filter(g => g.rating >= this.minPersonalRating).length;
+            const avgRating = ratedGames > 0 ? 
+                (this.filteredGames.filter(g => g.rating && g.rating > 0 && !isNaN(g.rating)).reduce((sum, g) => sum + g.rating, 0) / ratedGames).toFixed(1) :
+                'N/A';
+            
+            let ratingInfo = `Personal ratings active: ${qualifyingRatedGames} meet min ${this.minPersonalRating}★`;
+            if (this.includeUnrated && unratedGames > 0) {
+                ratingInfo += `, ${unratedGames} unrated included`;
+            }
+            ratingInfo += ` (avg rated: ${avgRating})`;
+            
+            infoText += ` • ${ratingInfo}`;
+        } else if (!this.includeUnrated && unratedGames > 0) {
+            // Personal rating system is disabled, but unrated games are being filtered out
+            const totalUnratedGames = this.games.filter(g => !g.rating || g.rating === 0 || isNaN(g.rating)).length;
+            infoText += ` • Excluding ${totalUnratedGames - unratedGames} unrated games`;
+        }
+        
+        weightInfo.textContent = infoText;
+    }
+
+    calculateAverageRecency() {
+        const gamesWithDates = this.filteredGames.filter(game => game.lastPlayDate);
+        if (gamesWithDates.length === 0) return -1;
+        
+        const now = new Date();
+        const totalDays = gamesWithDates.reduce((sum, game) => {
+            const diffTime = Math.abs(now - game.lastPlayDate);
+            const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+            return sum + diffDays;
+        }, 0);
+        
+        return Math.round(totalDays / gamesWithDates.length);
     }
 
     rollDice() {
@@ -685,10 +946,134 @@ class BoardGamePicker {
         
         setTimeout(() => {
             diceIcon.style.animation = '';
-            const randomIndex = Math.floor(Math.random() * this.filteredGames.length);
-            const selectedGame = this.filteredGames[randomIndex];
+            const selectedGame = this.selectWeightedGame();
             this.displaySelectedGame(selectedGame);
         }, 500);
+    }
+
+    selectWeightedGame() {
+        const games = this.filteredGames;
+        
+        if (this.currentWeightingMethod === 'random') {
+            // Simple random selection
+            const randomIndex = Math.floor(Math.random() * games.length);
+            return games[randomIndex];
+        }
+        
+        // Calculate weights for each game
+        const weights = games.map(game => this.calculateGameWeight(game));
+        const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
+        
+        // Handle edge case where all weights are 0
+        if (totalWeight === 0) {
+            const randomIndex = Math.floor(Math.random() * games.length);
+            return games[randomIndex];
+        }
+        
+        // Weighted random selection
+        let randomValue = Math.random() * totalWeight;
+        for (let i = 0; i < games.length; i++) {
+            randomValue -= weights[i];
+            if (randomValue <= 0) {
+                console.log(`🎯 Selected ${games[i].name} (weight: ${weights[i].toFixed(2)}, method: ${this.currentWeightingMethod})`);
+                return games[i];
+            }
+        }
+        
+        // Fallback (should not reach here)
+        return games[games.length - 1];
+    }
+
+    calculateGameWeight(game) {
+        let baseWeight;
+        
+        switch (this.currentWeightingMethod) {
+            case 'random':
+                baseWeight = 1; // All games equal weight
+                break;
+                
+            case 'unplayed':
+                if (game.numPlays === 0) {
+                    baseWeight = 10; // Unplayed games get 10x weight
+                } else if (game.lastPlayDate) {
+                    // Played games get weight based on recency (older = higher weight)
+                    baseWeight = this.calculateRecencyWeight(game);
+                } else {
+                    baseWeight = 2; // Games with unknown play dates get moderate weight
+                }
+                break;
+                
+            case 'recency':
+                if (game.numPlays === 0) {
+                    baseWeight = 5; // Unplayed games get 5x weight in recency mode
+                } else if (game.lastPlayDate) {
+                    baseWeight = this.calculateRecencyWeight(game);
+                } else {
+                    baseWeight = 3; // Games with unknown play dates get moderate weight
+                }
+                break;
+                
+            default:
+                baseWeight = 1;
+        }
+        
+        // Apply personal rating multiplier if enabled
+        if (this.usePersonalRating && game.rating && game.rating > 0 && !isNaN(game.rating)) {
+            const ratingMultiplier = this.calculateRatingWeight(game.rating);
+            return baseWeight * ratingMultiplier;
+        }
+        
+        return baseWeight;
+    }
+
+    calculateRatingWeight(rating) {
+        // Convert personal rating to weight multiplier
+        // BGG ratings are typically 1-10, with 5 being average
+        // We'll use a curve that strongly favors highly rated games
+        if (rating >= 9) {
+            return 3.0; // Excellent games (9-10) get 3x weight
+        } else if (rating >= 8) {
+            return 2.5; // Very good games (8-9) get 2.5x weight
+        } else if (rating >= 7) {
+            return 2.0; // Good games (7-8) get 2x weight
+        } else if (rating >= 6) {
+            return 1.5; // Above average games (6-7) get 1.5x weight
+        } else if (rating >= 5) {
+            return 1.0; // Average games (5-6) get normal weight
+        } else if (rating >= 4) {
+            return 0.7; // Below average games (4-5) get reduced weight
+        } else if (rating >= 3) {
+            return 0.5; // Poor games (3-4) get low weight
+        } else {
+            return 0.3; // Very poor games (1-3) get very low weight
+        }
+    }
+
+    calculateRecencyWeight(game) {
+        if (!game.lastPlayDate) {
+            return 1; // Base weight for games without play dates
+        }
+        
+        const now = new Date();
+        const diffTime = Math.abs(now - game.lastPlayDate);
+        const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+        
+        // Weight formula: games not played for longer get higher weights
+        // 1 day = 1.1x, 1 week = 1.7x, 1 month = 4x, 1 year = 16x, 2+ years = 25x
+        if (diffDays < 1) {
+            return 0.5; // Recently played games get lower weight
+        } else if (diffDays < 7) {
+            return 1 + (diffDays * 0.1); // 1.1 to 1.6
+        } else if (diffDays < 30) {
+            const weeks = diffDays / 7;
+            return 1 + weeks; // ~2 to 5
+        } else if (diffDays < 365) {
+            const months = diffDays / 30;
+            return 3 + (months * 2); // ~5 to 27
+        } else {
+            const years = diffDays / 365;
+            return Math.min(25, 15 + (years * 5)); // Cap at 25x weight
+        }
     }
 
     displaySelectedGame(game) {
@@ -707,6 +1092,25 @@ class BoardGamePicker {
             game.minPlayers === game.maxPlayers ? game.minPlayers : `${game.minPlayers}-${game.maxPlayers}`;
         document.getElementById('gamePlayTime').textContent = `${game.playTime} min`;
         document.getElementById('gameComplexity').textContent = game.complexity.toFixed(1);
+        
+        // Update ratings
+        const personalRatingElement = document.getElementById('gamePersonalRating');
+        if (game.rating && game.rating > 0 && !isNaN(game.rating)) {
+            personalRatingElement.textContent = `⭐ ${game.rating.toFixed(1)}/10`;
+            personalRatingElement.title = `Your personal rating: ${game.rating.toFixed(1)} out of 10`;
+        } else {
+            personalRatingElement.textContent = 'Not rated';
+            personalRatingElement.title = 'You have not rated this game yet';
+        }
+        
+        const bggRatingElement = document.getElementById('gameBggRating');
+        if (game.bggRating && game.bggRating > 0 && !isNaN(game.bggRating)) {
+            bggRatingElement.textContent = `🎯 ${game.bggRating.toFixed(1)}/10`;
+            bggRatingElement.title = `BoardGameGeek community rating: ${game.bggRating.toFixed(1)} out of 10`;
+        } else {
+            bggRatingElement.textContent = 'No rating';
+            bggRatingElement.title = 'No community rating available';
+        }
         
         // Update play history
         document.getElementById('gameNumPlays').textContent = game.numPlays > 0 ? game.numPlays : 'Never played';
@@ -916,39 +1320,14 @@ window.debugBGP = {
     testProxies: async () => {
         const app = window.boardGamePickerInstance;
         if (app) {
-            console.log('🔧 Testing all CORS proxies individually...');
+            console.log('🔧 Testing all CORS proxies...');
             const testUrl = 'https://boardgamegeek.com/xmlapi2/collection?username=Geekdo-BoardGameGeek&stats=1';
-            
-            // Test the full makeApiRequest function first
             try {
                 const result = await app.makeApiRequest(testUrl);
-                console.log('✅ Overall proxy test successful:', result.length, 'characters received');
+                console.log('✅ Proxy test successful:', result.length, 'characters received');
                 return true;
             } catch (error) {
-                console.error('❌ Overall proxy test failed:', error.message);
-                console.log('🔍 Testing individual proxies for debugging...');
-                
-                // Test each proxy individually for debugging
-                const corsProxies = [
-                    'https://api.allorigins.win/get?url=',
-                    'https://corsproxy.io/?',
-                    'https://api.codetabs.com/v1/proxy/?quest=',
-                    'https://cors.eu.org/',
-                    'https://crossorigin.me/'
-                ];
-                
-                for (let i = 0; i < corsProxies.length; i++) {
-                    try {
-                        const proxy = corsProxies[i];
-                        const fullUrl = proxy + encodeURIComponent(testUrl);
-                        console.log(`Testing proxy ${i + 1}: ${proxy}`);
-                        const response = await fetch(fullUrl);
-                        console.log(`Proxy ${i + 1} status:`, response.status, response.statusText);
-                    } catch (proxyError) {
-                        console.log(`Proxy ${i + 1} failed:`, proxyError.message);
-                    }
-                }
-                
+                console.error('❌ Proxy test failed:', error.message);
                 return false;
             }
         }
