@@ -8,7 +8,7 @@ class BoardGamePicker {
         this.enablePlayDateFetching = true; // Can be disabled if BGG API is too slow/limited
         
         // App version - update this when making releases
-        this.version = '1.2.0';
+        this.version = '1.2.1';
         
         // BGG API endpoints
         this.BGG_API_BASE = 'https://boardgamegeek.com/xmlapi2';
@@ -406,31 +406,117 @@ class BoardGamePicker {
 
         } catch (error) {
             console.error('Error fetching collection:', error);
-            this.showCollectionStatus(`❌ Error: ${error.message}`, 'error');
+            
+            let errorMessage = `❌ Error: ${error.message}`;
+            
+            // Provide specific guidance for common errors
+            if (error.message.includes('Content-Length') || error.message.includes('network response')) {
+                errorMessage = `❌ Network error occurred (Content-Length mismatch). This is usually temporary - please try again in a moment.`;
+            } else if (error.message.includes('CORS') || error.message.includes('proxy')) {
+                errorMessage = `❌ Network connectivity issue. Please check your internet connection and try again.`;
+            } else if (error.message.includes('timeout') || error.message.includes('AbortError')) {
+                errorMessage = `❌ Request timed out. BGG servers may be slow - please wait and try again.`;
+            } else if (error.message.includes('202')) {
+                errorMessage = `❌ BGG is still processing your collection. Please wait a moment and try again.`;
+            } else if (error.message.includes('All CORS proxies failed')) {
+                errorMessage = `❌ Multiple network issues detected. Please check your connection and try again later.`;
+            }
+            
+            this.showCollectionStatus(errorMessage, 'error');
         } finally {
             this.isLoading = false;
             this.toggleLoadingState(false);
         }
     }
 
-    async makeApiRequest(url) {
-        const fullUrl = this.CORS_PROXY + encodeURIComponent(url);
-        console.log('🌐 Making CORS request to:', fullUrl);
-        
-        const response = await fetch(fullUrl);
-        console.log('📡 Response status:', response.status, response.statusText);
-        console.log('📋 Response headers:', Object.fromEntries(response.headers.entries()));
-        
-        if (!response.ok) {
-            const errorText = await response.text();
-            console.error('❌ HTTP Error Response:', errorText);
-            throw new Error(`HTTP error! status: ${response.status} - ${response.statusText}`);
+    async makeApiRequest(url, retryCount = 0) {
+        const maxRetries = 3;
+        const corsProxies = [
+            'https://api.allorigins.win/get?url=',
+            'https://cors-anywhere.herokuapp.com/',
+            'https://api.codetabs.com/v1/proxy?quest='
+        ];
+
+        for (let proxyIndex = 0; proxyIndex < corsProxies.length; proxyIndex++) {
+            const proxy = corsProxies[proxyIndex];
+            const fullUrl = proxy + encodeURIComponent(url);
+            
+            try {
+                console.log(`🌐 Attempt ${retryCount + 1}/${maxRetries} with proxy ${proxyIndex + 1}:`, fullUrl);
+                
+                const response = await fetch(fullUrl, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json, text/plain, */*',
+                        'User-Agent': 'BoardGamePicker/1.2.0'
+                    },
+                    // Add timeout to prevent hanging requests (with fallback for older browsers)
+                    ...(typeof AbortSignal.timeout === 'function' ? { signal: AbortSignal.timeout(30000) } : {})
+                });
+                
+                console.log('📡 Response status:', response.status, response.statusText);
+                console.log('📋 Response headers:', Object.fromEntries(response.headers.entries()));
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error('❌ HTTP Error Response:', errorText);
+                    throw new Error(`HTTP error! status: ${response.status} - ${response.statusText}`);
+                }
+                
+                let responseText;
+                
+                // Handle different proxy response formats
+                if (proxy.includes('allorigins.win')) {
+                    // AllOrigins returns JSON with 'contents' field
+                    try {
+                        const jsonResponse = await response.json();
+                        responseText = jsonResponse.contents;
+                    } catch (e) {
+                        console.log('⚠️ AllOrigins JSON parse failed, trying as text');
+                        responseText = await response.text();
+                    }
+                } else {
+                    // Other proxies return raw text
+                    responseText = await response.text();
+                }
+                
+                if (!responseText || responseText.length === 0) {
+                    throw new Error('Empty response body');
+                }
+                
+                console.log('📝 Response preview:', responseText.substring(0, 500) + (responseText.length > 500 ? '...' : ''));
+                console.log('✅ Successfully fetched', responseText.length, 'characters');
+                
+                return responseText;
+                
+            } catch (error) {
+                console.error(`❌ Proxy ${proxyIndex + 1} failed:`, error.message);
+                
+                // If this is a Content-Length error and we haven't tried all proxies, continue
+                if (error.message.includes('Content-Length') || 
+                    error.message.includes('network response') ||
+                    error.message.includes('AbortError')) {
+                    
+                    if (proxyIndex < corsProxies.length - 1) {
+                        console.log('🔄 Trying next proxy...');
+                        continue;
+                    }
+                }
+                
+                // If we've tried all proxies and this is our last retry, throw the error
+                if (proxyIndex === corsProxies.length - 1) {
+                    if (retryCount < maxRetries - 1) {
+                        console.log(`🔄 Retrying in ${Math.pow(2, retryCount)} seconds...`);
+                        await new Promise(resolve => setTimeout(resolve, Math.pow(2, retryCount) * 1000));
+                        return this.makeApiRequest(url, retryCount + 1);
+                    } else {
+                        throw new Error(`All CORS proxies failed after ${maxRetries} attempts. Latest error: ${error.message}`);
+                    }
+                }
+            }
         }
         
-        const responseText = await response.text();
-        console.log('📝 Response preview:', responseText.substring(0, 500) + (responseText.length > 500 ? '...' : ''));
-        
-        return responseText;
+        throw new Error('All CORS proxies failed');
     }
 
     parseGameItem(item) {
@@ -805,6 +891,22 @@ window.debugBGP = {
             app.playDataCache.clear();
             console.log('🗑️ Play data cache cleared');
             return true;
+        }
+        return false;
+    },
+    testProxies: async () => {
+        const app = window.boardGamePickerInstance;
+        if (app) {
+            console.log('🔧 Testing all CORS proxies...');
+            const testUrl = 'https://boardgamegeek.com/xmlapi2/collection?username=Geekdo-BoardGameGeek&stats=1';
+            try {
+                const result = await app.makeApiRequest(testUrl);
+                console.log('✅ Proxy test successful:', result.length, 'characters received');
+                return true;
+            } catch (error) {
+                console.error('❌ Proxy test failed:', error.message);
+                return false;
+            }
         }
         return false;
     }
