@@ -89,6 +89,14 @@ class BoardGamePicker {
             const devPanel = document.getElementById('devPanel');
             devPanel.classList.remove('hidden');
             this.updateDevPanelInfo();
+            
+            // Set default username for development
+            const usernameInput = document.getElementById('bggUsername');
+            if (!usernameInput.value) {
+                usernameInput.value = 'flapJ4cks';
+                usernameInput.setAttribute('placeholder', 'flapJ4cks (dev default)');
+                console.log('🛠️ Development mode: Set default BGG username to "flapJ4cks"');
+            }
         }
     }
 
@@ -126,7 +134,8 @@ class BoardGamePicker {
             devInfo.innerHTML = `
                 <strong>Local Development Mode</strong><br>
                 Cache: <code>Empty</code><br>
-                Status: <code>No cached data</code>
+                Status: <code>No cached data</code><br>
+                Default user: <code>flapJ4cks</code>
             `;
         }
     }
@@ -225,8 +234,8 @@ class BoardGamePicker {
     }
 
     devTestAPIDialog() {
-        const username = prompt('Enter BGG username to test:\n\nSuggested test users:\n• Geekdo-BoardGameGeek\n• boardgamegeek\n• thedicetower\n• your-username', 
-                              document.getElementById('bggUsername').value || 'Geekdo-BoardGameGeek');
+        const username = prompt('Enter BGG username to test:\n\nSuggested test users:\n• flapJ4cks (dev default)\n• Geekdo-BoardGameGeek\n• boardgamegeek\n• thedicetower', 
+                              document.getElementById('bggUsername').value || 'flapJ4cks');
         
         if (username) {
             console.log(`🧪 Starting BGG API test for: ${username}`);
@@ -599,7 +608,7 @@ window.debugBGP = {
     testUser: async (username) => {
         const app = window.boardGamePickerInstance;
         if (app) {
-            await app.devTestBGGUser(username || 'Geekdo-BoardGameGeek');
+            await app.devTestBGGUser(username || 'flapJ4cks');
         } else {
             console.error('App instance not found');
         }
