@@ -142,6 +142,19 @@
             </section>
         </main>
 
+        <!-- Developer Panel (only visible when running locally) -->
+        <div class="dev-panel hidden" id="devPanel">
+            <h3 class="dev-panel-title">🛠️ Developer Tools</h3>
+            <div class="dev-panel-content">
+                <div class="dev-panel-info" id="devPanelInfo"></div>
+                <div class="dev-panel-actions">
+                    <button id="devClearCache" class="dev-btn dev-btn-danger">Clear Cache</button>
+                    <button id="devRefreshCache" class="dev-btn dev-btn-primary">Force Re-sync</button>
+                    <button id="devViewCache" class="dev-btn dev-btn-secondary">View Cache Data</button>
+                </div>
+            </div>
+        </div>
+
         <footer class="footer">
             <p>Data provided by <a href="https://boardgamegeek.com" target="_blank">BoardGameGeek</a></p>
         </footer>

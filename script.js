@@ -10,6 +10,7 @@ class BoardGamePicker {
         this.CORS_PROXY = 'https://api.allorigins.win/raw?url=';
         
         this.initializeEventListeners();
+        this.setupDeveloperPanel();
         this.loadSavedData();
     }
 
@@ -29,6 +30,11 @@ class BoardGamePicker {
         // Roll dice functionality
         document.getElementById('rollDice').addEventListener('click', () => this.rollDice());
         document.getElementById('rollAgain').addEventListener('click', () => this.rollDice());
+
+        // Developer panel functionality (only works when panel is visible)
+        document.getElementById('devClearCache')?.addEventListener('click', () => this.devClearCache());
+        document.getElementById('devRefreshCache')?.addEventListener('click', () => this.devRefreshCache());
+        document.getElementById('devViewCache')?.addEventListener('click', () => this.devViewCache());
     }
 
     loadSavedData() {
@@ -38,20 +44,145 @@ class BoardGamePicker {
                 const data = JSON.parse(savedData);
                 const now = Date.now();
                 const oneDay = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+                
+                // Check if we're running locally (for development)
+                const isLocalDevelopment = window.location.hostname === 'localhost' || 
+                                         window.location.hostname === '127.0.0.1' || 
+                                         window.location.protocol === 'file:';
 
-                // Check if data is less than 24 hours old
-                if (now - data.timestamp < oneDay) {
+                // For local development: never expire cache
+                // For production: use 24-hour expiration
+                const cacheValid = isLocalDevelopment || (now - data.timestamp < oneDay);
+
+                if (cacheValid) {
                     this.games = data.games;
                     this.currentUsername = data.username;
                     document.getElementById('bggUsername').value = this.currentUsername;
                     
-                    this.showCollectionStatus(`✅ Loaded ${this.games.length} games from cache for ${this.currentUsername}`, 'success');
+                    const ageHours = Math.floor((now - data.timestamp) / (60 * 60 * 1000));
+                    const cacheInfo = isLocalDevelopment ? 
+                        `✅ Loaded ${this.games.length} games from persistent cache for ${this.currentUsername}` :
+                        `✅ Loaded ${this.games.length} games from cache for ${this.currentUsername} (${ageHours}h old)`;
+                    
+                    this.showCollectionStatus(cacheInfo, 'success');
                     this.showGameSection();
                     this.applyFilters();
+                } else {
+                    // Cache expired, show info and clear it
+                    this.showCollectionStatus('⏰ Cache expired (24h), please re-sync your collection', 'error');
+                    localStorage.removeItem('bgg-collection-data');
                 }
             } catch (e) {
                 console.error('Error loading saved data:', e);
             }
+        }
+    }
+
+    setupDeveloperPanel() {
+        // Check if we're running locally (for development)
+        const isLocalDevelopment = window.location.hostname === 'localhost' || 
+                                 window.location.hostname === '127.0.0.1' || 
+                                 window.location.protocol === 'file:';
+
+        if (isLocalDevelopment) {
+            const devPanel = document.getElementById('devPanel');
+            devPanel.classList.remove('hidden');
+            this.updateDevPanelInfo();
+        }
+    }
+
+    updateDevPanelInfo() {
+        const devInfo = document.getElementById('devPanelInfo');
+        const cachedData = localStorage.getItem('bgg-collection-data');
+        
+        if (cachedData) {
+            try {
+                const data = JSON.parse(cachedData);
+                const ageHours = Math.floor((Date.now() - data.timestamp) / (60 * 60 * 1000));
+                const ageDays = Math.floor(ageHours / 24);
+                
+                let ageText;
+                if (ageDays > 0) {
+                    ageText = `${ageDays} day${ageDays > 1 ? 's' : ''}, ${ageHours % 24} hour${ageHours % 24 !== 1 ? 's' : ''}`;
+                } else {
+                    ageText = `${ageHours} hour${ageHours !== 1 ? 's' : ''}`;
+                }
+                
+                devInfo.innerHTML = `
+                    <strong>Local Development Mode</strong><br>
+                    Cache: <code>${data.games.length} games</code> for <code>${data.username}</code><br>
+                    Age: <code>${ageText}</code><br>
+                    Status: <code>Persistent (never expires locally)</code>
+                `;
+            } catch (e) {
+                devInfo.innerHTML = `
+                    <strong>Local Development Mode</strong><br>
+                    Cache: <code>Invalid cache data</code><br>
+                    Status: <code>Error parsing cache</code>
+                `;
+            }
+        } else {
+            devInfo.innerHTML = `
+                <strong>Local Development Mode</strong><br>
+                Cache: <code>Empty</code><br>
+                Status: <code>No cached data</code>
+            `;
+        }
+    }
+
+    devClearCache() {
+        if (confirm('Clear all cached BGG data? You will need to re-sync your collection.')) {
+            localStorage.removeItem('bgg-collection-data');
+            this.games = [];
+            this.filteredGames = [];
+            this.currentUsername = '';
+            document.getElementById('bggUsername').value = '';
+            document.getElementById('gameSection').classList.add('hidden');
+            document.getElementById('gameCard').classList.add('hidden');
+            document.getElementById('collectionStatus').textContent = '';
+            this.updateDevPanelInfo();
+            
+            console.log('🗑️ Cache cleared by developer action');
+            alert('Cache cleared! Enter a BGG username and sync to reload.');
+        }
+    }
+
+    devRefreshCache() {
+        if (!this.currentUsername) {
+            alert('No username set. Enter a BGG username first.');
+            return;
+        }
+        
+        if (confirm(`Force re-sync collection for ${this.currentUsername}? This will fetch fresh data from BGG.`)) {
+            // Clear current cache
+            localStorage.removeItem('bgg-collection-data');
+            // Trigger fresh fetch
+            this.fetchUserCollection();
+            console.log('🔄 Force refresh triggered by developer action');
+        }
+    }
+
+    devViewCache() {
+        const cachedData = localStorage.getItem('bgg-collection-data');
+        if (cachedData) {
+            try {
+                const data = JSON.parse(cachedData);
+                console.group('🎲 BGG Cache Data');
+                console.log('Username:', data.username);
+                console.log('Game Count:', data.games.length);
+                console.log('Cached:', new Date(data.timestamp));
+                console.log('Games:', data.games);
+                console.log('Full Data:', data);
+                console.groupEnd();
+                
+                alert(`Cache data logged to console!\n\nUser: ${data.username}\nGames: ${data.games.length}\nCached: ${new Date(data.timestamp).toLocaleString()}\n\nCheck browser console (F12) for full details.`);
+            } catch (e) {
+                console.error('Error parsing cache data:', e);
+                alert('Error: Cache data is corrupted.');
+            }
+        } else {
+            console.log('🎲 No BGG cache data found');
+            alert('No cache data found.');
         }
     }
 
@@ -62,6 +193,11 @@ class BoardGamePicker {
             timestamp: Date.now()
         };
         localStorage.setItem('bgg-collection-data', JSON.stringify(data));
+        
+        // Update dev panel if visible
+        if (document.getElementById('devPanel') && !document.getElementById('devPanel').classList.contains('hidden')) {
+            this.updateDevPanelInfo();
+        }
     }
 
     async fetchUserCollection() {
