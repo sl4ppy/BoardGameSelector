@@ -494,6 +494,27 @@ body {
     background: #dc2626;
 }
 
+.dev-btn-warning {
+    background: #f59e0b;
+    color: white;
+}
+
+.dev-btn-warning:hover {
+    background: #d97706;
+}
+
+.dev-panel-suggestions {
+    text-align: center;
+    margin-top: 0.5rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.dev-panel-suggestions small {
+    color: #d1d5db;
+    font-size: 0.75rem;
+}
+
 /* Footer */
 .footer {
     text-align: center;

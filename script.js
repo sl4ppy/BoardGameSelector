@@ -35,6 +35,7 @@ class BoardGamePicker {
         document.getElementById('devClearCache')?.addEventListener('click', () => this.devClearCache());
         document.getElementById('devRefreshCache')?.addEventListener('click', () => this.devRefreshCache());
         document.getElementById('devViewCache')?.addEventListener('click', () => this.devViewCache());
+        document.getElementById('devTestAPI')?.addEventListener('click', () => this.devTestAPIDialog());
     }
 
     loadSavedData() {
@@ -186,6 +187,54 @@ class BoardGamePicker {
         }
     }
 
+    // Test different BGG API approaches
+    async devTestBGGUser(username) {
+        console.group(`🧪 Testing BGG API for user: ${username}`);
+        
+        // Test 1: Direct collection API
+        try {
+            const directUrl = `${this.BGG_API_BASE}/collection?username=${username}`;
+            console.log('Test 1 - Direct API:', directUrl);
+            const response1 = await this.makeApiRequest(directUrl);
+            console.log('✅ Direct API success');
+        } catch (e) {
+            console.error('❌ Direct API failed:', e.message);
+        }
+
+        // Test 2: Collection with stats
+        try {
+            const statsUrl = `${this.BGG_API_BASE}/collection?username=${username}&stats=1`;
+            console.log('Test 2 - With stats:', statsUrl);
+            const response2 = await this.makeApiRequest(statsUrl);
+            console.log('✅ Stats API success');
+        } catch (e) {
+            console.error('❌ Stats API failed:', e.message);
+        }
+
+        // Test 3: User info API
+        try {
+            const userUrl = `${this.BGG_API_BASE}/user?name=${username}`;
+            console.log('Test 3 - User info:', userUrl);
+            const response3 = await this.makeApiRequest(userUrl);
+            console.log('✅ User info success');
+        } catch (e) {
+            console.error('❌ User info failed:', e.message);
+        }
+
+        console.groupEnd();
+    }
+
+    devTestAPIDialog() {
+        const username = prompt('Enter BGG username to test:\n\nSuggested test users:\n• Geekdo-BoardGameGeek\n• boardgamegeek\n• thedicetower\n• your-username', 
+                              document.getElementById('bggUsername').value || 'Geekdo-BoardGameGeek');
+        
+        if (username) {
+            console.log(`🧪 Starting BGG API test for: ${username}`);
+            this.devTestBGGUser(username.trim());
+            alert(`Testing BGG API for "${username}"\n\nCheck browser console (F12) for detailed results.`);
+        }
+    }
+
     saveCollectionData() {
         const data = {
             username: this.currentUsername,
@@ -217,20 +266,57 @@ class BoardGamePicker {
         try {
             // First, get the collection list
             const collectionUrl = `${this.BGG_API_BASE}/collection?username=${encodeURIComponent(username)}&stats=1&excludesubtype=boardgameexpansion`;
+            console.log('🔗 Fetching BGG collection from:', collectionUrl);
+            
             const response = await this.makeApiRequest(collectionUrl);
+            console.log('📦 Raw BGG API response length:', response.length);
             
             const parser = new DOMParser();
             const xmlDoc = parser.parseFromString(response, 'text/xml');
             
+            // Log the parsed XML for debugging
+            console.log('📋 Parsed XML document:', xmlDoc);
+            
             // Check for errors
             const error = xmlDoc.querySelector('error');
             if (error) {
+                console.error('❌ BGG API returned error:', error.textContent);
                 throw new Error(`BGG API Error: ${error.textContent}`);
             }
 
+            // Check for specific BGG API messages
+            const message = xmlDoc.querySelector('message');
+            if (message) {
+                console.log('💬 BGG API message:', message.textContent);
+                // BGG sometimes returns "Your request for this collection has been accepted and will be processed"
+                if (message.textContent.includes('accepted and will be processed')) {
+                    throw new Error('BGG is processing your collection. Please wait 30-60 seconds and try again.');
+                }
+            }
+
             const items = xmlDoc.querySelectorAll('item');
+            console.log('🎲 Found items in collection:', items.length);
+            
+            // More detailed error checking
             if (items.length === 0) {
-                throw new Error('No games found in collection or user does not exist');
+                // Check if the collection root exists but is empty
+                const collection = xmlDoc.querySelector('items');
+                if (collection) {
+                    const totalItems = collection.getAttribute('totalitems') || '0';
+                    console.log('📊 BGG reports total items:', totalItems);
+                    
+                    if (totalItems === '0') {
+                        throw new Error(`User "${username}" exists but has no games in their collection. Make sure games are marked as "Owned" in your BGG collection.`);
+                    } else {
+                        throw new Error(`User "${username}" has ${totalItems} items but none match the current filters. Try checking your BGG collection privacy settings.`);
+                    }
+                } else {
+                    // Check if it's a user not found vs other issue
+                    const rootElement = xmlDoc.documentElement;
+                    console.log('🔍 Root element:', rootElement?.tagName, rootElement?.textContent);
+                    
+                    throw new Error(`No collection data found for user "${username}". Please check: 1) Username spelling, 2) Collection privacy settings on BGG, 3) That you have games marked as "Owned"`);
+                }
             }
 
             this.showCollectionStatus(`🔄 Processing ${items.length} games...`, 'loading');
@@ -257,13 +343,22 @@ class BoardGamePicker {
 
     async makeApiRequest(url) {
         const fullUrl = this.CORS_PROXY + encodeURIComponent(url);
+        console.log('🌐 Making CORS request to:', fullUrl);
+        
         const response = await fetch(fullUrl);
+        console.log('📡 Response status:', response.status, response.statusText);
+        console.log('📋 Response headers:', Object.fromEntries(response.headers.entries()));
         
         if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+            const errorText = await response.text();
+            console.error('❌ HTTP Error Response:', errorText);
+            throw new Error(`HTTP error! status: ${response.status} - ${response.statusText}`);
         }
         
-        return await response.text();
+        const responseText = await response.text();
+        console.log('📝 Response preview:', responseText.substring(0, 500) + (responseText.length > 500 ? '...' : ''));
+        
+        return responseText;
     }
 
     parseGameItem(item) {
@@ -488,7 +583,7 @@ class BoardGamePicker {
 
 // Initialize the app when the DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
-    new BoardGamePicker();
+    window.boardGamePickerInstance = new BoardGamePicker();
 });
 
 // Add some utility functions for debugging
@@ -500,5 +595,24 @@ window.debugBGP = {
     getCache: () => {
         const data = localStorage.getItem('bgg-collection-data');
         return data ? JSON.parse(data) : null;
+    },
+    testUser: async (username) => {
+        const app = window.boardGamePickerInstance;
+        if (app) {
+            await app.devTestBGGUser(username || 'Geekdo-BoardGameGeek');
+        } else {
+            console.error('App instance not found');
+        }
+    },
+    directAPITest: async (username) => {
+        try {
+            const url = `https://boardgamegeek.com/xmlapi2/collection?username=${username}`;
+            console.log('Testing direct BGG API (will likely fail due to CORS):', url);
+            const response = await fetch(url);
+            console.log('Direct API Response:', response);
+        } catch (e) {
+            console.log('Expected CORS error:', e.message);
+            console.log('This is why we use the CORS proxy');
+        }
     }
 }; 
