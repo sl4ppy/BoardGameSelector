@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Board Game Picker</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1 class="title">🎲 Board Game Picker</h1>
+            <p class="subtitle">Discover your next board game adventure</p>
+        </header>
+
+        <main class="main">
+            <!-- Username Input Section -->
+            <section class="username-section" id="usernameSection">
+                <div class="input-group">
+                    <label for="bggUsername" class="input-label">Board Game Geek Username</label>
+                    <div class="input-wrapper">
+                        <input 
+                            type="text" 
+                            id="bggUsername" 
+                            class="username-input"
+                            placeholder="Enter your BGG username"
+                            autocomplete="off"
+                        >
+                        <button id="fetchCollection" class="fetch-btn">
+                            <span class="btn-text">Sync Collection</span>
+                            <div class="spinner hidden"></div>
+                        </button>
+                    </div>
+                </div>
+                <div class="collection-status" id="collectionStatus"></div>
+            </section>
+
+            <!-- Game Selection Section -->
+            <section class="game-section hidden" id="gameSection">
+                <div class="controls-panel">
+                    <h2 class="section-title">Filter Your Collection</h2>
+                    
+                    <div class="filters">
+                        <div class="filter-group">
+                            <label class="filter-label">Player Count</label>
+                            <div class="filter-options">
+                                <select id="playerCount" class="filter-select">
+                                    <option value="">Any players</option>
+                                    <option value="1">1 player</option>
+                                    <option value="2">2 players</option>
+                                    <option value="3">3 players</option>
+                                    <option value="4">4 players</option>
+                                    <option value="5">5+ players</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="filter-group">
+                            <label class="filter-label">Play Time (minutes)</label>
+                            <div class="filter-options">
+                                <select id="playTime" class="filter-select">
+                                    <option value="">Any duration</option>
+                                    <option value="0-30">Quick (0-30 min)</option>
+                                    <option value="30-60">Medium (30-60 min)</option>
+                                    <option value="60-120">Long (1-2 hours)</option>
+                                    <option value="120+">Epic (2+ hours)</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="filter-group">
+                            <label class="filter-label">Complexity</label>
+                            <div class="filter-options">
+                                <select id="complexity" class="filter-select">
+                                    <option value="">Any complexity</option>
+                                    <option value="1-2">Light (1-2)</option>
+                                    <option value="2-3">Medium (2-3)</option>
+                                    <option value="3-4">Heavy (3-4)</option>
+                                    <option value="4-5">Very Heavy (4-5)</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="filter-group">
+                            <label class="filter-label">Game Type</label>
+                            <div class="filter-options">
+                                <select id="gameType" class="filter-select">
+                                    <option value="">All games</option>
+                                    <option value="owned">Owned only</option>
+                                    <option value="wishlist">Wishlist only</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="roll-section">
+                        <button id="rollDice" class="roll-btn">
+                            <span class="dice-icon">🎲</span>
+                            <span class="btn-text">Roll the Dice!</span>
+                        </button>
+                        <div class="filtered-count" id="filteredCount"></div>
+                    </div>
+                </div>
+
+                <!-- Selected Game Display -->
+                <div class="game-display" id="gameDisplay">
+                    <div class="game-card hidden" id="gameCard">
+                        <div class="game-image-container">
+                            <img id="gameImage" class="game-image" alt="Game cover">
+                            <div class="image-loader">
+                                <div class="spinner"></div>
+                            </div>
+                        </div>
+                        <div class="game-info">
+                            <h3 id="gameName" class="game-name"></h3>
+                            <div class="game-details">
+                                <div class="detail-item">
+                                    <span class="detail-label">Year:</span>
+                                    <span id="gameYear" class="detail-value"></span>
+                                </div>
+                                <div class="detail-item">
+                                    <span class="detail-label">Players:</span>
+                                    <span id="gamePlayers" class="detail-value"></span>
+                                </div>
+                                <div class="detail-item">
+                                    <span class="detail-label">Play Time:</span>
+                                    <span id="gamePlayTime" class="detail-value"></span>
+                                </div>
+                                <div class="detail-item">
+                                    <span class="detail-label">Complexity:</span>
+                                    <span id="gameComplexity" class="detail-value"></span>
+                                </div>
+                            </div>
+                            <div class="game-actions">
+                                <a id="bggLink" href="#" target="_blank" class="bgg-link">View on BGG</a>
+                                <button id="rollAgain" class="roll-again-btn">Roll Again</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <footer class="footer">
+            <p>Data provided by <a href="https://boardgamegeek.com" target="_blank">BoardGameGeek</a></p>
+        </footer>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html> 
