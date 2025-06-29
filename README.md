@@ -32,6 +32,13 @@ Visit the live application: [Your GitHub Pages URL will go here]
 
 ## 🛠️ Installation & Deployment on GitHub Pages
 
+### 🌟 **Branching Strategy**
+This project uses a **dual-branch workflow** for safe development:
+- **`main`** - Production branch (live site)
+- **`dev`** - Development branch (for making changes)
+
+📖 **See [WORKFLOW.md](WORKFLOW.md) for detailed development guidelines**
+
 ### Option 1: Fork this Repository
 
 1. Fork this repository to your GitHub account
@@ -142,12 +149,28 @@ window.debugBGP.getCache()
 
 ## 🤝 Contributing
 
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature-name`
-3. Make your changes
-4. Commit: `git commit -m "Add feature"`
-5. Push: `git push origin feature-name`
-6. Open a Pull Request
+This project follows a **dual-branch workflow** for safe development:
+
+### **Quick Start for Contributors**
+```bash
+# Clone and setup
+git clone https://github.com/sl4ppy/BoardGameSelector.git
+cd BoardGameSelector
+git checkout dev
+
+# Make changes on dev branch
+git add .
+git commit -m "Add: your feature description"
+git push origin dev
+```
+
+### **Full Workflow**
+1. **Development**: Work on the `dev` branch
+2. **Testing**: Test thoroughly before deploying
+3. **Production**: Merge `dev` → `main` for live deployment
+4. **Deployment**: `main` branch automatically deploys to GitHub Pages
+
+📋 **See [WORKFLOW.md](WORKFLOW.md) for complete development guidelines**
 
 ## 📝 License
 
