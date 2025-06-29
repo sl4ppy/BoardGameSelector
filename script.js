@@ -4,6 +4,8 @@ class BoardGamePicker {
         this.filteredGames = [];
         this.currentUsername = '';
         this.isLoading = false;
+        this.playDataCache = new Map(); // Cache play data to avoid duplicate API calls
+        this.enablePlayDateFetching = true; // Can be disabled if BGG API is too slow/limited
         
         // App version - update this when making releases
         this.version = '1.2.0';
@@ -160,6 +162,7 @@ class BoardGamePicker {
                 devInfo.innerHTML = `
                     <strong>Local Development Mode</strong> <code>v${this.version}</code><br>
                     Cache: <code>${data.games.length} games</code> for <code>${data.username}</code><br>
+                    Play cache: <code>${this.playDataCache.size} entries</code><br>
                     Age: <code>${ageText}</code><br>
                     Status: <code>Persistent (never expires locally)</code><br>
                     Default filter: <code>Owned games only</code>
@@ -175,6 +178,7 @@ class BoardGamePicker {
             devInfo.innerHTML = `
                 <strong>Local Development Mode</strong> <code>v${this.version}</code><br>
                 Cache: <code>Empty</code><br>
+                Play cache: <code>${this.playDataCache.size} entries</code><br>
                 Status: <code>No cached data</code><br>
                 Default user: <code>flapJ4cks</code><br>
                 Default filter: <code>Owned games only</code>
@@ -185,6 +189,7 @@ class BoardGamePicker {
     devClearCache() {
         if (confirm('Clear all cached BGG data? You will need to re-sync your collection.')) {
             localStorage.removeItem('bgg-collection-data');
+            this.playDataCache.clear(); // Clear play data cache too
             this.games = [];
             this.filteredGames = [];
             this.currentUsername = '';
@@ -441,29 +446,8 @@ class BoardGamePicker {
             numPlays: parseInt(item.querySelector('numplays')?.textContent || '0'),
         };
 
-        // Parse play history
-        const status = item.querySelector('status');
-        if (status) {
-            const lastModified = status.getAttribute('lastmodified');
-            if (lastModified) {
-                game.lastModified = new Date(lastModified);
-            }
-        }
-
-        // Parse comment for last play date (BGG sometimes includes this info in comments)
-        const comment = item.querySelector('comment');
-        if (comment) {
-            game.comment = comment.textContent;
-            // Try to extract last play date from comment if it exists
-            const playDateMatch = game.comment.match(/last played:?\s*(\d{4}-\d{2}-\d{2}|\d{1,2}\/\d{1,2}\/\d{4})/i);
-            if (playDateMatch) {
-                try {
-                    game.lastPlayDate = new Date(playDateMatch[1]);
-                } catch (e) {
-                    // If date parsing fails, ignore
-                }
-            }
-        }
+        // Note: Play dates are fetched separately from the BGG plays API
+        // The collection API doesn't include last play dates
 
         // Parse stats if available
         const stats = item.querySelector('stats');
@@ -622,17 +606,15 @@ class BoardGamePicker {
         // Update play history
         document.getElementById('gameNumPlays').textContent = game.numPlays > 0 ? game.numPlays : 'Never played';
         
-        // Format last played date
-        let lastPlayedText = 'Not tracked';
-        if (game.lastPlayDate) {
-            lastPlayedText = this.formatDateForDisplay(game.lastPlayDate);
-        } else if (game.lastModified && game.numPlays > 0) {
-            // Use last modified as fallback if we have plays but no specific play date
-            lastPlayedText = this.formatDateForDisplay(game.lastModified) + ' (approx)';
+        // Try to get last played date from plays API if enabled
+        if (this.enablePlayDateFetching && game.numPlays > 0) {
+            document.getElementById('gameLastPlayed').textContent = 'Loading...';
+            this.updateLastPlayedDate(game);
         } else if (game.numPlays === 0) {
-            lastPlayedText = 'Never played';
+            document.getElementById('gameLastPlayed').textContent = 'Never played';
+        } else {
+            document.getElementById('gameLastPlayed').textContent = 'Available in play log';
         }
-        document.getElementById('gameLastPlayed').textContent = lastPlayedText;
         
         document.getElementById('bggLink').href = `https://boardgamegeek.com/boardgame/${game.id}`;
 
@@ -662,6 +644,65 @@ class BoardGamePicker {
 
         // Scroll to the game card
         gameCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    async updateLastPlayedDate(game) {
+        if (game.numPlays === 0) {
+            return; // No plays to fetch
+        }
+
+        // Check if we already have cached play data for this game
+        const cacheKey = `${this.currentUsername}-${game.id}`;
+        if (this.playDataCache.has(cacheKey)) {
+            const cachedData = this.playDataCache.get(cacheKey);
+            document.getElementById('gameLastPlayed').textContent = cachedData;
+            return;
+        }
+
+        try {
+            // BGG Plays API call - get recent plays for this game
+            const playsUrl = `${this.BGG_API_BASE}/plays?username=${encodeURIComponent(this.currentUsername)}&id=${game.id}&page=1`;
+            console.log(`🎯 Fetching play history for ${game.name}:`, playsUrl);
+            
+            const response = await this.makeApiRequest(playsUrl);
+            const parser = new DOMParser();
+            const xmlDoc = parser.parseFromString(response, 'text/xml');
+            
+            // Check for plays
+            const plays = xmlDoc.querySelectorAll('play');
+            let resultText = 'Unable to load';
+            
+            if (plays.length > 0) {
+                // Get the most recent play (they should be sorted by date desc)
+                const latestPlay = plays[0];
+                const playDate = latestPlay.getAttribute('date');
+                
+                if (playDate) {
+                    const lastPlayedDate = new Date(playDate);
+                    const formattedDate = this.formatDateForDisplay(lastPlayedDate);
+                    resultText = formattedDate;
+                    
+                    // Cache the play date on the game object for future reference
+                    game.lastPlayDate = lastPlayedDate;
+                    console.log(`✅ Found last play date for ${game.name}: ${formattedDate}`);
+                } else {
+                    resultText = 'Date unavailable';
+                }
+            } else {
+                // BGG says there are plays but API returned none (privacy/sync issue)
+                resultText = 'Private or syncing';
+            }
+            
+            // Cache the result
+            this.playDataCache.set(cacheKey, resultText);
+            document.getElementById('gameLastPlayed').textContent = resultText;
+            
+        } catch (error) {
+            console.log(`⚠️ Could not fetch play history for ${game.name}:`, error.message);
+            const errorText = 'Unable to load';
+            this.playDataCache.set(cacheKey, errorText);
+            document.getElementById('gameLastPlayed').textContent = errorText;
+        }
     }
 
     formatDateForDisplay(date) {
@@ -748,5 +789,23 @@ window.debugBGP = {
             console.log('Expected CORS error:', e.message);
             console.log('This is why we use the CORS proxy');
         }
+    },
+    togglePlayDates: () => {
+        const app = window.boardGamePickerInstance;
+        if (app) {
+            app.enablePlayDateFetching = !app.enablePlayDateFetching;
+            console.log(`🎯 Play date fetching: ${app.enablePlayDateFetching ? 'ENABLED' : 'DISABLED'}`);
+            return app.enablePlayDateFetching;
+        }
+        return false;
+    },
+    clearPlayCache: () => {
+        const app = window.boardGamePickerInstance;
+        if (app) {
+            app.playDataCache.clear();
+            console.log('🗑️ Play data cache cleared');
+            return true;
+        }
+        return false;
     }
 }; 
