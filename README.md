@@ -2,7 +2,8 @@
 
 A beautiful web application that helps you discover your next board game adventure by randomly selecting from your BoardGameGeek collection with advanced filtering options.
 
-![Board Game Picker Preview](https://img.shields.io/badge/Status-Live-brightgreen)
+[![Board Game Picker Live](https://img.shields.io/badge/🎲_Try_It_Live-brightgreen?style=for-the-badge)](https://sl4ppy.github.io/BoardGameSelector/)
+![Status](https://img.shields.io/badge/Status-Live-brightgreen)
 
 ## ✨ Features
 
@@ -16,7 +17,9 @@ A beautiful web application that helps you discover your next board game adventu
 
 ## 🚀 Live Demo
 
-Visit the live application: [Your GitHub Pages URL will go here]
+**🌟 [Try the Board Game Picker Live!](https://sl4ppy.github.io/BoardGameSelector/) 🌟**
+
+Visit the live application: https://sl4ppy.github.io/BoardGameSelector/
 
 ## 📋 How to Use
 
