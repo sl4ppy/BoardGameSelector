@@ -60,6 +60,14 @@ class BoardGamePicker {
                     this.currentUsername = data.username;
                     document.getElementById('bggUsername').value = this.currentUsername;
                     
+                    // Set default filter to "owned" in development mode
+                    if (isLocalDevelopment) {
+                        const gameTypeFilter = document.getElementById('gameType');
+                        if (gameTypeFilter.value === '') {
+                            gameTypeFilter.value = 'owned';
+                        }
+                    }
+                    
                     const ageHours = Math.floor((now - data.timestamp) / (60 * 60 * 1000));
                     const cacheInfo = isLocalDevelopment ? 
                         `✅ Loaded ${this.games.length} games from persistent cache for ${this.currentUsername}` :
@@ -97,6 +105,19 @@ class BoardGamePicker {
                 usernameInput.setAttribute('placeholder', 'flapJ4cks (dev default)');
                 console.log('🛠️ Development mode: Set default BGG username to "flapJ4cks"');
             }
+
+            // Set default filter to "owned" games only in development
+            const gameTypeFilter = document.getElementById('gameType');
+            if (gameTypeFilter.value === '') {
+                gameTypeFilter.value = 'owned';
+                console.log('🛠️ Development mode: Set default filter to "owned" games only');
+                
+                // Update the option text to show it's the dev default
+                const ownedOption = gameTypeFilter.querySelector('option[value="owned"]');
+                if (ownedOption && !ownedOption.textContent.includes('(dev default)')) {
+                    ownedOption.textContent = 'Owned only (dev default)';
+                }
+            }
         }
     }
 
@@ -121,7 +142,8 @@ class BoardGamePicker {
                     <strong>Local Development Mode</strong><br>
                     Cache: <code>${data.games.length} games</code> for <code>${data.username}</code><br>
                     Age: <code>${ageText}</code><br>
-                    Status: <code>Persistent (never expires locally)</code>
+                    Status: <code>Persistent (never expires locally)</code><br>
+                    Default filter: <code>Owned games only</code>
                 `;
             } catch (e) {
                 devInfo.innerHTML = `
@@ -135,7 +157,8 @@ class BoardGamePicker {
                 <strong>Local Development Mode</strong><br>
                 Cache: <code>Empty</code><br>
                 Status: <code>No cached data</code><br>
-                Default user: <code>flapJ4cks</code>
+                Default user: <code>flapJ4cks</code><br>
+                Default filter: <code>Owned games only</code>
             `;
         }
     }
@@ -339,6 +362,18 @@ class BoardGamePicker {
             this.saveCollectionData();
             this.showCollectionStatus(`✅ Successfully loaded ${this.games.length} games!`, 'success');
             this.showGameSection();
+            
+            // Set default filter to "owned" in development mode after loading collection
+            const isLocalDevelopment = window.location.hostname === 'localhost' || 
+                                     window.location.hostname === '127.0.0.1' || 
+                                     window.location.protocol === 'file:';
+            if (isLocalDevelopment) {
+                const gameTypeFilter = document.getElementById('gameType');
+                if (gameTypeFilter.value === '') {
+                    gameTypeFilter.value = 'owned';
+                }
+            }
+            
             this.applyFilters();
 
         } catch (error) {
