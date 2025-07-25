@@ -17,16 +17,33 @@ class BoardGamePicker {
         this.rateLimitWarningShown = false;
         
         // App version - update this when making releases
-        this.version = '1.5.3';
+        this.version = '1.6.0';
         
         // BGG API endpoints
         this.BGG_API_BASE = 'https://boardgamegeek.com/xmlapi2';
         this.CORS_PROXY = 'https://api.allorigins.win/raw?url=';
         
+        // Proxy health tracking
+        this.proxyHealthCache = new Map();
+        this.proxyHealthCheckInterval = 300000; // Check health every 5 minutes
+        this.customProxyUrl = localStorage.getItem('bgg-custom-proxy-url') || '';
+        
+        // Request queue for better performance
+        this.requestQueue = [];
+        this.activeRequests = 0;
+        this.maxConcurrentRequests = 2;
+        
+        // IndexedDB for better caching
+        this.dbName = 'BoardGamePickerDB';
+        this.dbVersion = 1;
+        this.db = null;
+        
         this.initializeEventListeners();
         this.setupDeveloperPanel();
         this.setupVersionDisplay();
-        this.loadSavedData();
+        this.initializeProxyHealthCheck();
+        this.initializeIndexedDB().then(() => this.loadSavedData());
+        this.initializePWA();
     }
 
     initializeEventListeners() {
@@ -85,29 +102,68 @@ class BoardGamePicker {
         document.getElementById('devTestAPI')?.addEventListener('click', () => this.devTestAPIDialog());
     }
 
-    loadSavedData() {
+    async loadSavedData() {
+        // Try IndexedDB first
+        if (this.db) {
+            try {
+                const cachedData = await this.getFromIndexedDB('collection');
+                if (cachedData) {
+                    const now = Date.now();
+                    const oneDay = 24 * 60 * 60 * 1000;
+                    const isLocalDevelopment = window.location.hostname === 'localhost' || 
+                                             window.location.hostname === '127.0.0.1' || 
+                                             window.location.protocol === 'file:';
+                    const cacheValid = isLocalDevelopment || (now - cachedData.timestamp < oneDay);
+                    
+                    if (cacheValid && cachedData.username) {
+                        this.games = cachedData.games || [];
+                        this.currentUsername = cachedData.username;
+                        document.getElementById('bggUsername').value = this.currentUsername;
+                        
+                        if (isLocalDevelopment) {
+                            const gameTypeFilter = document.getElementById('gameType');
+                            if (gameTypeFilter.value === '') {
+                                gameTypeFilter.value = 'owned';
+                            }
+                        }
+                        
+                        const ageHours = Math.floor((now - cachedData.timestamp) / (60 * 60 * 1000));
+                        const cacheInfo = isLocalDevelopment ? 
+                            `✅ Loaded ${this.games.length} games from IndexedDB cache for ${this.currentUsername}` :
+                            `✅ Loaded ${this.games.length} games from cache for ${this.currentUsername} (${ageHours}h old)`;
+                        
+                        this.showCollectionStatus(cacheInfo, 'success');
+                        this.showGameSection();
+                        this.applyFilters();
+                        this.handleUrlParameters();
+                        return;
+                    } else if (!cacheValid) {
+                        this.showCollectionStatus('⏰ Cache expired (24h), please re-sync your collection', 'error');
+                        await this.clearIndexedDB();
+                    }
+                }
+            } catch (error) {
+                console.error('IndexedDB read error:', error);
+            }
+        }
+        
+        // Fall back to localStorage
         const savedData = localStorage.getItem('bgg-collection-data');
         if (savedData) {
             try {
                 const data = JSON.parse(savedData);
                 const now = Date.now();
-                const oneDay = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
-                
-                // Check if we're running locally (for development)
+                const oneDay = 24 * 60 * 60 * 1000;
                 const isLocalDevelopment = window.location.hostname === 'localhost' || 
                                          window.location.hostname === '127.0.0.1' || 
                                          window.location.protocol === 'file:';
-
-                // For local development: never expire cache
-                // For production: use 24-hour expiration
                 const cacheValid = isLocalDevelopment || (now - data.timestamp < oneDay);
-
+                
                 if (cacheValid) {
                     this.games = data.games;
                     this.currentUsername = data.username;
                     document.getElementById('bggUsername').value = this.currentUsername;
                     
-                    // Set default filter to "owned" in development mode
                     if (isLocalDevelopment) {
                         const gameTypeFilter = document.getElementById('gameType');
                         if (gameTypeFilter.value === '') {
@@ -117,14 +173,20 @@ class BoardGamePicker {
                     
                     const ageHours = Math.floor((now - data.timestamp) / (60 * 60 * 1000));
                     const cacheInfo = isLocalDevelopment ? 
-                        `✅ Loaded ${this.games.length} games from persistent cache for ${this.currentUsername}` :
+                        `✅ Loaded ${this.games.length} games from localStorage cache for ${this.currentUsername}` :
                         `✅ Loaded ${this.games.length} games from cache for ${this.currentUsername} (${ageHours}h old)`;
                     
                     this.showCollectionStatus(cacheInfo, 'success');
                     this.showGameSection();
                     this.applyFilters();
+                    this.handleUrlParameters();
+                    
+                    // Migrate to IndexedDB if available
+                    if (this.db) {
+                        await this.saveToIndexedDB('collection', data);
+                        console.log('🔄 Migrated cache to IndexedDB');
+                    }
                 } else {
-                    // Cache expired, show info and clear it
                     this.showCollectionStatus('⏰ Cache expired (24h), please re-sync your collection', 'error');
                     localStorage.removeItem('bgg-collection-data');
                 }
@@ -381,14 +443,30 @@ class BoardGamePicker {
         }
     }
 
-    saveCollectionData() {
+    async saveCollectionData() {
         const data = {
             username: this.currentUsername,
             games: this.games,
             timestamp: Date.now(),
             version: this.version
         };
-        localStorage.setItem('bgg-collection-data', JSON.stringify(data));
+        
+        // Save to IndexedDB if available
+        if (this.db) {
+            try {
+                await this.saveToIndexedDB('collection', data);
+                console.log('💾 Collection data saved to IndexedDB');
+            } catch (error) {
+                console.error('IndexedDB save error:', error);
+                // Fall back to localStorage
+                localStorage.setItem('bgg-collection-data', JSON.stringify(data));
+                console.log('💾 Collection data saved to localStorage (fallback)');
+            }
+        } else {
+            // Use localStorage if IndexedDB not available
+            localStorage.setItem('bgg-collection-data', JSON.stringify(data));
+            console.log('💾 Collection data saved to localStorage');
+        }
         
         // Update dev panel if visible
         if (document.getElementById('devPanel') && !document.getElementById('devPanel').classList.contains('hidden')) {
@@ -546,15 +624,32 @@ class BoardGamePicker {
     async makeApiRequest(url, retryCount = 0) {
         const maxRetries = 3;
         const corsProxies = [
-            { url: 'https://api.allorigins.win/get?url=', name: 'AllOrigins' },
+            { url: 'https://api.allorigins.win/get?url=', name: 'AllOrigins', jsonResponse: true },
             { url: 'https://thingproxy.freeboard.io/fetch/', name: 'ThingProxy' },
             { url: 'https://api.codetabs.com/v1/proxy?quest=', name: 'CodeTabs' },
             { url: 'https://corsproxy.io/?', name: 'CORSProxy.io' },
+            { url: 'https://cors-proxy.htmldriven.com/?url=', name: 'HTMLDriven' },
+            { url: 'https://proxy.cors.sh/', name: 'CORS.sh' },
+            { url: 'https://cors.bridged.cc/', name: 'Bridged' },
             { url: 'https://cors-anywhere.herokuapp.com/', name: 'CORS-Anywhere' }
         ];
+        
+        // Add custom proxy if configured
+        if (this.customProxyUrl) {
+            corsProxies.unshift({ url: this.customProxyUrl, name: 'Custom Proxy' });
+        }
+        
+        // Sort proxies by health score
+        const sortedProxies = this.sortProxiesByHealth(corsProxies);
 
-        for (let proxyIndex = 0; proxyIndex < corsProxies.length; proxyIndex++) {
-            const proxy = corsProxies[proxyIndex];
+        for (let proxyIndex = 0; proxyIndex < sortedProxies.length; proxyIndex++) {
+            const proxy = sortedProxies[proxyIndex];
+            
+            // Skip unhealthy proxies
+            if (this.isProxyUnhealthy(proxy.name)) {
+                console.log(`⚠️ Skipping unhealthy proxy: ${proxy.name}`);
+                continue;
+            }
             const fullUrl = proxy.url + encodeURIComponent(url);
             
             try {
@@ -589,16 +684,14 @@ class BoardGamePicker {
                 let responseText;
                 
                 // Handle different proxy response formats
-                if (proxy.url.includes('allorigins.win')) {
-                    // AllOrigins returns JSON with 'contents' field
-                    // Clone the response so we can read it multiple times if needed
+                if (proxy.jsonResponse || proxy.url.includes('allorigins.win')) {
+                    // JSON response proxies
                     const responseClone = response.clone();
                     try {
                         const jsonResponse = await response.json();
-                        responseText = jsonResponse.contents;
+                        responseText = jsonResponse.contents || jsonResponse.data || jsonResponse.body;
                     } catch (e) {
-                        console.log('⚠️ AllOrigins JSON parse failed, trying as text');
-                        // Use the cloned response to avoid "body already consumed" error
+                        console.log('⚠️ JSON parse failed, trying as text');
                         responseText = await responseClone.text();
                     }
                 } else {
@@ -613,10 +706,16 @@ class BoardGamePicker {
                 console.log('📝 Response preview:', responseText.substring(0, 500) + (responseText.length > 500 ? '...' : ''));
                 console.log('✅ Successfully fetched', responseText.length, 'characters');
                 
+                // Update proxy health on success
+                this.updateProxyHealth(proxy.name, true);
+                
                 return responseText;
                 
             } catch (error) {
                 console.error(`❌ ${proxy.name} failed:`, error.message);
+                
+                // Update proxy health on failure
+                this.updateProxyHealth(proxy.name, false);
                 
                 // Check if this error indicates rate limiting or temporary issues
                 const isRateLimited = error.message.includes('403') || 
@@ -714,16 +813,120 @@ class BoardGamePicker {
     }
 
     async enrichGameData() {
-        // For now, we'll work with the data we have from the collection API
-        // The collection API already provides most of the information we need
-        // If we need more detailed info, we could batch request game details
+        // Check if any games need additional data
+        const gamesNeedingData = this.games.filter(game => 
+            !game.stats?.rating?.average?.value || 
+            !game.stats?.averageweight?.value ||
+            !game.stats?.minplayers?.value ||
+            !game.minPlayers || !game.maxPlayers || !game.playTime || !game.complexity
+        );
         
-        // Fill in missing complexity and other details for games that don't have them
+        if (gamesNeedingData.length === 0) {
+            console.log('✅ All games have complete data');
+            return;
+        }
+        
+        console.log(`🔍 Enriching data for ${gamesNeedingData.length} games...`);
+        
+        // First apply defaults for basic fields
         for (let game of this.games) {
             if (!game.minPlayers) game.minPlayers = 1;
             if (!game.maxPlayers) game.maxPlayers = 1;
             if (!game.playTime) game.playTime = 60; // Default to 60 minutes
             if (!game.complexity) game.complexity = 2.5; // Default to medium complexity
+        }
+        
+        // Then batch fetch detailed data for games that need it
+        const batchSize = 20; // BGG API supports up to 20 items per request
+        const batches = [];
+        for (let i = 0; i < gamesNeedingData.length; i += batchSize) {
+            batches.push(gamesNeedingData.slice(i, i + batchSize));
+        }
+        
+        // Process batches with queue
+        const batchPromises = batches.map(batch => 
+            this.queueRequest(() => this.fetchBatchGameDetails(batch))
+        );
+        
+        await Promise.all(batchPromises);
+    }
+    
+    async fetchBatchGameDetails(games) {
+        if (games.length === 0) return;
+        
+        const ids = games.map(g => g.id).join(',');
+        const batchUrl = `${this.BGG_API_BASE}/thing?id=${ids}&stats=1&type=boardgame`;
+        
+        try {
+            console.log(`📦 Fetching batch of ${games.length} games...`);
+            const response = await this.makeApiRequest(batchUrl);
+            const parser = new DOMParser();
+            const xmlDoc = parser.parseFromString(response, 'text/xml');
+            
+            const items = xmlDoc.querySelectorAll('item');
+            items.forEach(item => {
+                const gameId = item.getAttribute('id');
+                const game = this.games.find(g => g.id === gameId);
+                
+                if (game) {
+                    // Update missing data
+                    if (!game.stats) game.stats = {};
+                    
+                    // Rating
+                    const avgRating = item.querySelector('statistics ratings average')?.getAttribute('value');
+                    if (avgRating && !game.stats.rating?.average?.value) {
+                        if (!game.stats.rating) game.stats.rating = {};
+                        if (!game.stats.rating.average) game.stats.rating.average = {};
+                        game.stats.rating.average.value = parseFloat(avgRating);
+                    }
+                    
+                    // Weight/Complexity
+                    const avgWeight = item.querySelector('statistics ratings averageweight')?.getAttribute('value');
+                    if (avgWeight) {
+                        if (!game.stats.averageweight) game.stats.averageweight = {};
+                        game.stats.averageweight.value = parseFloat(avgWeight);
+                        game.complexity = parseFloat(avgWeight);
+                    }
+                    
+                    // Players
+                    const minPlayers = item.querySelector('minplayers')?.getAttribute('value');
+                    const maxPlayers = item.querySelector('maxplayers')?.getAttribute('value');
+                    if (minPlayers) {
+                        game.minPlayers = parseInt(minPlayers);
+                        if (!game.stats.minplayers) game.stats.minplayers = {};
+                        game.stats.minplayers.value = parseInt(minPlayers);
+                    }
+                    if (maxPlayers) {
+                        game.maxPlayers = parseInt(maxPlayers);
+                        if (!game.stats.maxplayers) game.stats.maxplayers = {};
+                        game.stats.maxplayers.value = parseInt(maxPlayers);
+                    }
+                    
+                    // Play time
+                    const minTime = item.querySelector('minplaytime')?.getAttribute('value');
+                    const maxTime = item.querySelector('maxplaytime')?.getAttribute('value');
+                    const playTime = item.querySelector('playingtime')?.getAttribute('value');
+                    
+                    if (playTime) {
+                        game.playTime = parseInt(playTime);
+                    } else if (maxTime) {
+                        game.playTime = parseInt(maxTime);
+                    }
+                    
+                    if (minTime) {
+                        if (!game.stats.minplaytime) game.stats.minplaytime = {};
+                        game.stats.minplaytime.value = parseInt(minTime);
+                    }
+                    if (maxTime) {
+                        if (!game.stats.maxplaytime) game.stats.maxplaytime = {};
+                        game.stats.maxplaytime.value = parseInt(maxTime);
+                    }
+                }
+            });
+            
+            console.log(`✅ Batch complete: enriched ${items.length} games`);
+        } catch (error) {
+            console.error('Error fetching batch game details:', error);
         }
     }
 
@@ -1153,6 +1356,9 @@ class BoardGamePicker {
 
         // Scroll to the game card
         gameCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        
+        // Add social sharing button
+        this.addSocialSharing(game);
     }
 
     async updateLastPlayedDate(game) {
@@ -1160,8 +1366,25 @@ class BoardGamePicker {
             return; // No plays to fetch
         }
 
-        // Check if we already have cached play data for this game
         const cacheKey = `${this.currentUsername}-${game.id}`;
+        
+        // Check IndexedDB cache first
+        if (this.db) {
+            try {
+                const cachedPlayData = await this.getFromIndexedDB('playData', cacheKey);
+                if (cachedPlayData && this.isPlayDataCacheValid(cachedPlayData)) {
+                    document.getElementById('gameLastPlayed').textContent = cachedPlayData.displayText;
+                    if (cachedPlayData.lastPlayDate) {
+                        game.lastPlayDate = new Date(cachedPlayData.lastPlayDate);
+                    }
+                    return;
+                }
+            } catch (error) {
+                console.error('Error reading play data from IndexedDB:', error);
+            }
+        }
+        
+        // Check in-memory cache
         if (this.playDataCache.has(cacheKey)) {
             const cachedData = this.playDataCache.get(cacheKey);
             document.getElementById('gameLastPlayed').textContent = cachedData;
@@ -1169,41 +1392,44 @@ class BoardGamePicker {
         }
 
         try {
-            // BGG Plays API call - get recent plays for this game
-            const playsUrl = `${this.BGG_API_BASE}/plays?username=${encodeURIComponent(this.currentUsername)}&id=${game.id}&page=1`;
-            console.log(`🎯 Fetching play history for ${game.name}:`, playsUrl);
+            // Queue the play data request to avoid overwhelming BGG API
+            const playData = await this.queueRequest(() => this.fetchPlayDataForGame(game));
             
-            const response = await this.makeApiRequest(playsUrl);
-            const parser = new DOMParser();
-            const xmlDoc = parser.parseFromString(response, 'text/xml');
-            
-            // Check for plays
-            const plays = xmlDoc.querySelectorAll('play');
             let resultText = 'Unable to load';
+            let lastPlayDate = null;
             
-            if (plays.length > 0) {
-                // Get the most recent play (they should be sorted by date desc)
-                const latestPlay = plays[0];
+            if (playData && playData.plays.length > 0) {
+                const latestPlay = playData.plays[0];
                 const playDate = latestPlay.getAttribute('date');
                 
                 if (playDate) {
-                    const lastPlayedDate = new Date(playDate);
-                    const formattedDate = this.formatDateForDisplay(lastPlayedDate);
-                    resultText = formattedDate;
-                    
-                    // Cache the play date on the game object for future reference
-                    game.lastPlayDate = lastPlayedDate;
-                    console.log(`✅ Found last play date for ${game.name}: ${formattedDate}`);
+                    lastPlayDate = new Date(playDate);
+                    resultText = this.formatDateForDisplay(lastPlayDate);
+                    game.lastPlayDate = lastPlayDate;
+                    console.log(`✅ Found last play date for ${game.name}: ${resultText}`);
                 } else {
                     resultText = 'Date unavailable';
                 }
-            } else {
-                // BGG says there are plays but API returned none (privacy/sync issue)
+            } else if (game.numPlays > 0) {
                 resultText = 'Private or syncing';
             }
             
-            // Cache the result
+            // Cache in memory
             this.playDataCache.set(cacheKey, resultText);
+            
+            // Cache in IndexedDB with structured data
+            if (this.db) {
+                const playDataEntry = {
+                    cacheKey,
+                    displayText: resultText,
+                    lastPlayDate: lastPlayDate ? lastPlayDate.toISOString() : null,
+                    timestamp: Date.now(),
+                    gameId: game.id,
+                    gameName: game.name
+                };
+                await this.saveToIndexedDB('playData', playDataEntry);
+            }
+            
             document.getElementById('gameLastPlayed').textContent = resultText;
             
         } catch (error) {
@@ -1212,6 +1438,25 @@ class BoardGamePicker {
             this.playDataCache.set(cacheKey, errorText);
             document.getElementById('gameLastPlayed').textContent = errorText;
         }
+    }
+    
+    async fetchPlayDataForGame(game) {
+        const playsUrl = `${this.BGG_API_BASE}/plays?username=${encodeURIComponent(this.currentUsername)}&id=${game.id}&page=1`;
+        console.log(`🎯 Fetching play history for ${game.name}:`, playsUrl);
+        
+        const response = await this.makeApiRequest(playsUrl);
+        const parser = new DOMParser();
+        const xmlDoc = parser.parseFromString(response, 'text/xml');
+        
+        return {
+            plays: xmlDoc.querySelectorAll('play'),
+            xmlDoc
+        };
+    }
+    
+    isPlayDataCacheValid(cachedData) {
+        const oneWeek = 7 * 24 * 60 * 60 * 1000; // 1 week cache for play data
+        return (Date.now() - cachedData.timestamp) < oneWeek;
     }
 
     formatDateForDisplay(date) {
@@ -1263,6 +1508,899 @@ class BoardGamePicker {
             btnText.textContent = 'Sync Collection';
         }
     }
+    
+    // Proxy health management methods
+    initializeProxyHealthCheck() {
+        // Load saved proxy health data
+        const savedHealth = localStorage.getItem('bgg-proxy-health');
+        if (savedHealth) {
+            try {
+                const healthData = JSON.parse(savedHealth);
+                this.proxyHealthCache = new Map(Object.entries(healthData));
+            } catch (e) {
+                console.error('Failed to load proxy health data:', e);
+            }
+        }
+        
+        // Periodically check proxy health
+        setInterval(() => this.checkAllProxyHealth(), this.proxyHealthCheckInterval);
+    }
+    
+    updateProxyHealth(proxyName, success) {
+        const health = this.proxyHealthCache.get(proxyName) || {
+            successCount: 0,
+            failureCount: 0,
+            lastCheck: Date.now(),
+            lastSuccess: null,
+            consecutiveFailures: 0
+        };
+        
+        if (success) {
+            health.successCount++;
+            health.lastSuccess = Date.now();
+            health.consecutiveFailures = 0;
+        } else {
+            health.failureCount++;
+            health.consecutiveFailures++;
+        }
+        
+        health.lastCheck = Date.now();
+        health.successRate = health.successCount / (health.successCount + health.failureCount);
+        
+        this.proxyHealthCache.set(proxyName, health);
+        
+        // Save to localStorage
+        const healthData = Object.fromEntries(this.proxyHealthCache);
+        localStorage.setItem('bgg-proxy-health', JSON.stringify(healthData));
+    }
+    
+    isProxyUnhealthy(proxyName) {
+        const health = this.proxyHealthCache.get(proxyName);
+        if (!health) return false;
+        
+        // Consider a proxy unhealthy if:
+        // - It has 5+ consecutive failures
+        // - Its success rate is below 20% with at least 10 attempts
+        // - It hasn't had a success in the last hour
+        const oneHourAgo = Date.now() - 3600000;
+        
+        return health.consecutiveFailures >= 5 ||
+               (health.successRate < 0.2 && (health.successCount + health.failureCount) >= 10) ||
+               (health.lastSuccess && health.lastSuccess < oneHourAgo);
+    }
+    
+    sortProxiesByHealth(proxies) {
+        return proxies.sort((a, b) => {
+            const healthA = this.proxyHealthCache.get(a.name);
+            const healthB = this.proxyHealthCache.get(b.name);
+            
+            // Prioritize custom proxy
+            if (a.name === 'Custom Proxy') return -1;
+            if (b.name === 'Custom Proxy') return 1;
+            
+            // If no health data, treat as neutral
+            if (!healthA && !healthB) return 0;
+            if (!healthA) return 1;
+            if (!healthB) return -1;
+            
+            // Sort by success rate
+            return (healthB.successRate || 0) - (healthA.successRate || 0);
+        });
+    }
+    
+    async checkAllProxyHealth() {
+        console.log('🔍 Running proxy health check...');
+        const testUrl = `${this.BGG_API_BASE}/thing?id=13&type=boardgame`; // Small test request
+        
+        const proxies = [
+            { url: 'https://api.allorigins.win/get?url=', name: 'AllOrigins', jsonResponse: true },
+            { url: 'https://thingproxy.freeboard.io/fetch/', name: 'ThingProxy' },
+            { url: 'https://api.codetabs.com/v1/proxy?quest=', name: 'CodeTabs' },
+            { url: 'https://corsproxy.io/?', name: 'CORSProxy.io' },
+            { url: 'https://cors-proxy.htmldriven.com/?url=', name: 'HTMLDriven' },
+            { url: 'https://proxy.cors.sh/', name: 'CORS.sh' },
+            { url: 'https://cors.bridged.cc/', name: 'Bridged' }
+        ];
+        
+        for (const proxy of proxies) {
+            try {
+                const response = await fetch(proxy.url + encodeURIComponent(testUrl), {
+                    method: 'GET',
+                    ...(typeof AbortSignal.timeout === 'function' ? { signal: AbortSignal.timeout(10000) } : {})
+                });
+                
+                if (response.ok) {
+                    console.log(`✅ ${proxy.name} is healthy`);
+                    this.updateProxyHealth(proxy.name, true);
+                } else {
+                    console.log(`❌ ${proxy.name} returned ${response.status}`);
+                    this.updateProxyHealth(proxy.name, false);
+                }
+            } catch (e) {
+                console.log(`❌ ${proxy.name} failed health check:`, e.message);
+                this.updateProxyHealth(proxy.name, false);
+            }
+        }
+    }
+    
+    showAdvancedSettings() {
+        const modal = document.createElement('div');
+        modal.className = 'settings-modal';
+        modal.innerHTML = `
+            <div class="settings-content">
+                <h3>Advanced Settings</h3>
+                <div class="setting-item">
+                    <label for="customProxy">Custom CORS Proxy URL:</label>
+                    <input type="text" id="customProxy" value="${this.customProxyUrl}" placeholder="https://your-proxy.com/?url=">
+                    <small>Leave empty to use default proxies</small>
+                </div>
+                <div class="setting-item">
+                    <label>
+                        <input type="checkbox" id="enablePlayDates" ${this.enablePlayDateFetching ? 'checked' : ''}>
+                        Enable play date fetching (may slow down selection)
+                    </label>
+                </div>
+                <div class="proxy-health">
+                    <h4>Proxy Health Status</h4>
+                    <div id="proxyHealthList"></div>
+                    <button class="btn-secondary" onclick="window.boardGamePickerInstance.checkAllProxyHealth()">Check Now</button>
+                </div>
+                <div class="modal-buttons">
+                    <button class="btn-primary" onclick="window.boardGamePickerInstance.saveAdvancedSettings()">Save</button>
+                    <button class="btn-secondary" onclick="window.boardGamePickerInstance.closeAdvancedSettings()">Cancel</button>
+                </div>
+                
+                <div class="advanced-actions">
+                    <h4>Data Export</h4>
+                    <button class="btn-secondary" onclick="window.boardGamePickerInstance.exportCollection('json')">Export as JSON</button>
+                    <button class="btn-secondary" onclick="window.boardGamePickerInstance.exportCollection('csv')">Export as CSV</button>
+                    <button class="btn-secondary" onclick="window.boardGamePickerInstance.exportCollection('text')">Export as Text</button>
+                </div>
+                
+                <div class="advanced-actions">
+                    <h4>Analytics</h4>
+                    <button class="btn-secondary" onclick="window.boardGamePickerInstance.showAnalyticsDashboard()">View Collection Analytics</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+        
+        // Show proxy health
+        this.updateProxyHealthDisplay();
+    }
+    
+    updateProxyHealthDisplay() {
+        const healthList = document.getElementById('proxyHealthList');
+        if (!healthList) return;
+        
+        let html = '<ul class="proxy-list">';
+        this.proxyHealthCache.forEach((health, name) => {
+            const rate = Math.round((health.successRate || 0) * 100);
+            const status = this.isProxyUnhealthy(name) ? 'unhealthy' : 'healthy';
+            html += `<li class="proxy-${status}">${name}: ${rate}% success rate</li>`;
+        });
+        html += '</ul>';
+        healthList.innerHTML = html;
+    }
+    
+    saveAdvancedSettings() {
+        const customProxy = document.getElementById('customProxy').value;
+        const enablePlayDates = document.getElementById('enablePlayDates').checked;
+        
+        this.customProxyUrl = customProxy;
+        localStorage.setItem('bgg-custom-proxy-url', customProxy);
+        
+        this.enablePlayDateFetching = enablePlayDates;
+        
+        this.closeAdvancedSettings();
+        this.showStatusMessage('Settings saved successfully', 'success');
+    }
+    
+    closeAdvancedSettings() {
+        const modal = document.querySelector('.settings-modal');
+        if (modal) {
+            modal.remove();
+        }
+    }
+    
+    // Request queue implementation for better performance
+    async processRequestQueue() {
+        while (this.requestQueue.length > 0 && this.activeRequests < this.maxConcurrentRequests) {
+            const request = this.requestQueue.shift();
+            this.activeRequests++;
+            
+            try {
+                const result = await request.fn();
+                request.resolve(result);
+            } catch (error) {
+                request.reject(error);
+            } finally {
+                this.activeRequests--;
+                this.processRequestQueue();
+            }
+        }
+    }
+    
+    queueRequest(fn) {
+        return new Promise((resolve, reject) => {
+            this.requestQueue.push({ fn, resolve, reject });
+            this.processRequestQueue();
+        });
+    }
+    
+    // IndexedDB implementation
+    async initializeIndexedDB() {
+        return new Promise((resolve) => {
+            try {
+                const request = indexedDB.open(this.dbName, this.dbVersion);
+                
+                request.onerror = () => {
+                    console.error('IndexedDB error:', request.error);
+                    resolve(); // Continue without IndexedDB
+                };
+                
+                request.onsuccess = () => {
+                    this.db = request.result;
+                    console.log('✅ IndexedDB initialized');
+                    resolve();
+                };
+                
+                request.onupgradeneeded = (event) => {
+                    const db = event.target.result;
+                    
+                    // Create object stores
+                    if (!db.objectStoreNames.contains('collection')) {
+                        db.createObjectStore('collection');
+                    }
+                    if (!db.objectStoreNames.contains('playData')) {
+                        const playStore = db.createObjectStore('playData', { keyPath: 'cacheKey' });
+                        playStore.createIndex('timestamp', 'timestamp');
+                    }
+                    if (!db.objectStoreNames.contains('gameDetails')) {
+                        const detailsStore = db.createObjectStore('gameDetails', { keyPath: 'id' });
+                        detailsStore.createIndex('timestamp', 'timestamp');
+                    }
+                    
+                    console.log('🔧 IndexedDB schema created/updated');
+                };
+            } catch (error) {
+                console.error('Failed to initialize IndexedDB:', error);
+                resolve(); // Continue without IndexedDB
+            }
+        });
+    }
+    
+    async saveToIndexedDB(storeName, data) {
+        if (!this.db) return;
+        
+        return new Promise((resolve, reject) => {
+            const transaction = this.db.transaction([storeName], 'readwrite');
+            const store = transaction.objectStore(storeName);
+            
+            const request = store.put(data, storeName === 'collection' ? 'main' : data.id || data.cacheKey);
+            
+            request.onsuccess = () => resolve();
+            request.onerror = () => reject(request.error);
+        });
+    }
+    
+    async getFromIndexedDB(storeName, key = 'main') {
+        if (!this.db) return null;
+        
+        return new Promise((resolve, reject) => {
+            const transaction = this.db.transaction([storeName], 'readonly');
+            const store = transaction.objectStore(storeName);
+            const request = store.get(key);
+            
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+        });
+    }
+    
+    async clearIndexedDB() {
+        if (!this.db) return;
+        
+        const stores = ['collection', 'playData', 'gameDetails'];
+        for (const storeName of stores) {
+            const transaction = this.db.transaction([storeName], 'readwrite');
+            const store = transaction.objectStore(storeName);
+            store.clear();
+        }
+        console.log('🗑️ IndexedDB cleared');
+    }
+    
+    // PWA Support
+    async initializePWA() {
+        if ('serviceWorker' in navigator) {
+            try {
+                const registration = await navigator.serviceWorker.register('./sw.js');
+                console.log('✅ Service Worker registered:', registration.scope);
+                
+                // Handle service worker updates
+                registration.addEventListener('updatefound', () => {
+                    const newWorker = registration.installing;
+                    newWorker.addEventListener('statechange', () => {
+                        if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                            this.showUpdateNotification();
+                        }
+                    });
+                });
+                
+                // Check for updates every hour
+                setInterval(() => {
+                    registration.update();
+                }, 3600000);
+                
+            } catch (error) {
+                console.error('Service Worker registration failed:', error);
+            }
+        }
+        
+        // Handle app install prompt
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            this.deferredPrompt = e;
+            this.showInstallPrompt();
+        });
+        
+        // Handle app installed
+        window.addEventListener('appinstalled', () => {
+            console.log('✅ PWA installed successfully');
+            this.deferredPrompt = null;
+            this.hideInstallPrompt();
+        });
+        
+        // Handle offline/online status
+        window.addEventListener('online', () => {
+            this.showStatusMessage('Back online! Data will sync automatically.', 'success');
+            this.handleOnlineStatus(true);
+        });
+        
+        window.addEventListener('offline', () => {
+            this.showStatusMessage('You\'re offline. Some features may be limited.', 'warning');
+            this.handleOnlineStatus(false);
+        });
+    }
+    
+    showUpdateNotification() {
+        const notification = document.createElement('div');
+        notification.className = 'update-notification';
+        notification.innerHTML = `
+            <div class="update-content">
+                <p>A new version is available!</p>
+                <button onclick="window.location.reload()" class="btn-primary">Update Now</button>
+                <button onclick="this.parentElement.parentElement.remove()" class="btn-secondary">Later</button>
+            </div>
+        `;
+        document.body.appendChild(notification);
+    }
+    
+    showInstallPrompt() {
+        const installButton = document.createElement('button');
+        installButton.className = 'install-prompt';
+        installButton.innerHTML = '📥 Install App';
+        installButton.onclick = () => this.promptInstall();
+        
+        // Add to header
+        const header = document.querySelector('.header');
+        if (header) {
+            header.appendChild(installButton);
+        }
+    }
+    
+    hideInstallPrompt() {
+        const prompt = document.querySelector('.install-prompt');
+        if (prompt) {
+            prompt.remove();
+        }
+    }
+    
+    async promptInstall() {
+        if (this.deferredPrompt) {
+            this.deferredPrompt.prompt();
+            const result = await this.deferredPrompt.userChoice;
+            
+            if (result.outcome === 'accepted') {
+                console.log('✅ User accepted the install prompt');
+            } else {
+                console.log('❌ User dismissed the install prompt');
+            }
+            
+            this.deferredPrompt = null;
+            this.hideInstallPrompt();
+        }
+    }
+    
+    handleOnlineStatus(isOnline) {
+        // Update UI to reflect online/offline status
+        document.body.classList.toggle('offline', !isOnline);
+        
+        if (isOnline && this.pendingSyncOperations) {
+            // Sync any pending operations
+            this.syncPendingOperations();
+        }
+    }
+    
+    async syncPendingOperations() {
+        // Implement sync logic for when back online
+        console.log('🔄 Syncing pending operations...');
+        
+        // Re-check proxy health
+        await this.checkAllProxyHealth();
+        
+        // Clear any stale cache entries
+        if (this.db) {
+            // Clean up old play data
+            const oneWeekAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+            // Implementation would go here
+        }
+    }
+    
+    // Export functionality
+    exportCollection(format) {
+        if (!this.games || this.games.length === 0) {
+            this.showStatusMessage('No collection data to export', 'error');
+            return;
+        }
+        
+        let exportData;
+        let filename;
+        let mimeType;
+        
+        switch (format) {
+            case 'json':
+                exportData = JSON.stringify({
+                    username: this.currentUsername,
+                    exportDate: new Date().toISOString(),
+                    totalGames: this.games.length,
+                    games: this.games.map(game => ({
+                        id: game.id,
+                        name: game.name,
+                        yearPublished: game.yearPublished,
+                        minPlayers: game.minPlayers,
+                        maxPlayers: game.maxPlayers,
+                        playTime: game.playTime,
+                        complexity: game.complexity,
+                        personalRating: game.personalRating,
+                        bggRating: game.bggRating,
+                        numPlays: game.numPlays,
+                        owned: game.owned,
+                        wishlist: game.wishlist,
+                        lastPlayDate: game.lastPlayDate
+                    }))
+                }, null, 2);
+                filename = `bgg-collection-${this.currentUsername}-${new Date().toISOString().split('T')[0]}.json`;
+                mimeType = 'application/json';
+                break;
+                
+            case 'csv':
+                const headers = ['ID', 'Name', 'Year', 'Min Players', 'Max Players', 'Play Time', 'Complexity', 'Personal Rating', 'BGG Rating', 'Plays', 'Owned', 'Wishlist', 'Last Played'];
+                const csvRows = [headers];
+                
+                this.games.forEach(game => {
+                    csvRows.push([
+                        game.id,
+                        `"${game.name}"`,
+                        game.yearPublished || '',
+                        game.minPlayers || '',
+                        game.maxPlayers || '',
+                        game.playTime || '',
+                        game.complexity || '',
+                        game.personalRating || '',
+                        game.bggRating || '',
+                        game.numPlays || 0,
+                        game.owned ? 'Yes' : 'No',
+                        game.wishlist ? 'Yes' : 'No',
+                        game.lastPlayDate ? game.lastPlayDate.toDateString() : 'Never'
+                    ]);
+                });
+                
+                exportData = csvRows.map(row => row.join(',')).join('\n');
+                filename = `bgg-collection-${this.currentUsername}-${new Date().toISOString().split('T')[0]}.csv`;
+                mimeType = 'text/csv';
+                break;
+                
+            case 'text':
+                exportData = `Board Game Collection - ${this.currentUsername}\n`;
+                exportData += `Exported: ${new Date().toLocaleString()}\n`;
+                exportData += `Total Games: ${this.games.length}\n\n`;
+                
+                this.games.forEach((game, index) => {
+                    exportData += `${index + 1}. ${game.name}\n`;
+                    exportData += `   Year: ${game.yearPublished || 'Unknown'}\n`;
+                    exportData += `   Players: ${game.minPlayers}-${game.maxPlayers}\n`;
+                    exportData += `   Time: ${game.playTime} minutes\n`;
+                    exportData += `   Complexity: ${game.complexity}/5\n`;
+                    if (game.personalRating) {
+                        exportData += `   My Rating: ${game.personalRating}/10\n`;
+                    }
+                    exportData += `   BGG Rating: ${game.bggRating || 'N/A'}\n`;
+                    exportData += `   Plays: ${game.numPlays || 0}\n`;
+                    exportData += `   Status: ${game.owned ? 'Owned' : 'Wishlist'}\n\n`;
+                });
+                
+                filename = `bgg-collection-${this.currentUsername}-${new Date().toISOString().split('T')[0]}.txt`;
+                mimeType = 'text/plain';
+                break;
+        }
+        
+        // Create and download file
+        const blob = new Blob([exportData], { type: mimeType });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        this.showStatusMessage(`Collection exported as ${format.toUpperCase()}`, 'success');
+    }
+    
+    // Analytics dashboard
+    showAnalyticsDashboard() {
+        if (!this.games || this.games.length === 0) {
+            this.showStatusMessage('No collection data for analytics', 'error');
+            return;
+        }
+        
+        const analytics = this.calculateAnalytics();
+        
+        const modal = document.createElement('div');
+        modal.className = 'analytics-modal';
+        modal.innerHTML = `
+            <div class="analytics-content">
+                <h3>Collection Analytics</h3>
+                <div class="analytics-grid">
+                    <div class="stat-card">
+                        <h4>Collection Overview</h4>
+                        <p>Total Games: <strong>${analytics.totalGames}</strong></p>
+                        <p>Owned Games: <strong>${analytics.ownedGames}</strong></p>
+                        <p>Wishlist Games: <strong>${analytics.wishlistGames}</strong></p>
+                        <p>Games Played: <strong>${analytics.playedGames}</strong></p>
+                        <p>Unplayed Games: <strong>${analytics.unplayedGames}</strong></p>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <h4>Ratings</h4>
+                        <p>Average Personal Rating: <strong>${analytics.avgPersonalRating}</strong></p>
+                        <p>Average BGG Rating: <strong>${analytics.avgBggRating}</strong></p>
+                        <p>Highest Rated: <strong>${analytics.highestRated?.name || 'N/A'}</strong></p>
+                        <p>Most Played: <strong>${analytics.mostPlayed?.name || 'N/A'}</strong> (${analytics.mostPlayed?.numPlays || 0} plays)</p>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <h4>Game Mechanics</h4>
+                        <p>Average Complexity: <strong>${analytics.avgComplexity}/5</strong></p>
+                        <p>Average Play Time: <strong>${analytics.avgPlayTime} min</strong></p>
+                        <p>Player Count Range: <strong>${analytics.minPlayers}-${analytics.maxPlayers}</strong></p>
+                        <p>Collection Value Est.: <strong>$${analytics.estimatedValue}</strong></p>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <h4>Play Patterns</h4>
+                        <p>Total Plays: <strong>${analytics.totalPlays}</strong></p>
+                        <p>Plays per Game: <strong>${analytics.playsPerGame}</strong></p>
+                        <p>Recently Played: <strong>${analytics.recentlyPlayed}</strong></p>
+                        <p>Play Frequency: <strong>${analytics.playFrequency}</strong></p>
+                    </div>
+                </div>
+                
+                <div class="analytics-charts">
+                    <div class="chart-container">
+                        <h4>Complexity Distribution</h4>
+                        <div class="bar-chart" id="complexityChart"></div>
+                    </div>
+                    
+                    <div class="chart-container">
+                        <h4>Rating Distribution</h4>
+                        <div class="bar-chart" id="ratingChart"></div>
+                    </div>
+                </div>
+                
+                <div class="modal-buttons">
+                    <button class="btn-secondary" onclick="window.boardGamePickerInstance.exportAnalytics()">Export Analytics</button>
+                    <button class="btn-secondary" onclick="window.boardGamePickerInstance.closeAnalyticsDashboard()">Close</button>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+        
+        // Generate charts
+        this.generateAnalyticsCharts(analytics);
+    }
+    
+    calculateAnalytics() {
+        const analytics = {
+            totalGames: this.games.length,
+            ownedGames: this.games.filter(g => g.owned).length,
+            wishlistGames: this.games.filter(g => g.wishlist).length,
+            playedGames: this.games.filter(g => g.numPlays > 0).length,
+            unplayedGames: this.games.filter(g => g.numPlays === 0).length,
+            totalPlays: this.games.reduce((sum, g) => sum + (g.numPlays || 0), 0)
+        };
+        
+        // Rating analytics
+        const personalRatings = this.games.filter(g => g.personalRating).map(g => g.personalRating);
+        const bggRatings = this.games.filter(g => g.bggRating).map(g => g.bggRating);
+        
+        analytics.avgPersonalRating = personalRatings.length > 0 ? 
+            (personalRatings.reduce((sum, r) => sum + r, 0) / personalRatings.length).toFixed(1) : 'N/A';
+        analytics.avgBggRating = bggRatings.length > 0 ? 
+            (bggRatings.reduce((sum, r) => sum + r, 0) / bggRatings.length).toFixed(1) : 'N/A';
+        
+        // Find highest rated and most played
+        analytics.highestRated = this.games.reduce((prev, curr) => 
+            (curr.personalRating || 0) > (prev.personalRating || 0) ? curr : prev, this.games[0]);
+        analytics.mostPlayed = this.games.reduce((prev, curr) => 
+            (curr.numPlays || 0) > (prev.numPlays || 0) ? curr : prev, this.games[0]);
+        
+        // Game mechanics
+        const complexities = this.games.filter(g => g.complexity).map(g => g.complexity);
+        const playTimes = this.games.filter(g => g.playTime).map(g => g.playTime);
+        
+        analytics.avgComplexity = complexities.length > 0 ? 
+            (complexities.reduce((sum, c) => sum + c, 0) / complexities.length).toFixed(1) : 'N/A';
+        analytics.avgPlayTime = playTimes.length > 0 ? 
+            Math.round(playTimes.reduce((sum, t) => sum + t, 0) / playTimes.length) : 'N/A';
+        
+        analytics.minPlayers = Math.min(...this.games.map(g => g.minPlayers || 1));
+        analytics.maxPlayers = Math.max(...this.games.map(g => g.maxPlayers || 1));
+        
+        // Estimated collection value (rough estimate based on BGG data)
+        analytics.estimatedValue = Math.round(analytics.ownedGames * 45); // $45 average game price
+        
+        // Play patterns
+        analytics.playsPerGame = analytics.totalPlays > 0 ? 
+            (analytics.totalPlays / analytics.playedGames).toFixed(1) : '0';
+        
+        const recentlyPlayedCount = this.games.filter(g => {
+            if (!g.lastPlayDate) return false;
+            const thirtyDaysAgo = new Date();
+            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+            return g.lastPlayDate > thirtyDaysAgo;
+        }).length;
+        
+        analytics.recentlyPlayed = recentlyPlayedCount;
+        analytics.playFrequency = analytics.totalPlays > 0 ? 
+            `${(analytics.totalPlays / 365).toFixed(1)} plays/year` : 'N/A';
+        
+        return analytics;
+    }
+    
+    generateAnalyticsCharts(analytics) {
+        // Simple text-based charts
+        this.generateComplexityChart();
+        this.generateRatingChart();
+    }
+    
+    generateComplexityChart() {
+        const complexityBuckets = { '1-2': 0, '2-3': 0, '3-4': 0, '4-5': 0 };
+        
+        this.games.forEach(game => {
+            const complexity = game.complexity || 2.5;
+            if (complexity <= 2) complexityBuckets['1-2']++;
+            else if (complexity <= 3) complexityBuckets['2-3']++;
+            else if (complexity <= 4) complexityBuckets['3-4']++;
+            else complexityBuckets['4-5']++;
+        });
+        
+        const chartEl = document.getElementById('complexityChart');
+        let html = '';
+        const maxCount = Math.max(...Object.values(complexityBuckets));
+        
+        Object.entries(complexityBuckets).forEach(([range, count]) => {
+            const percentage = maxCount > 0 ? (count / maxCount) * 100 : 0;
+            html += `
+                <div class="chart-bar">
+                    <div class="bar-label">${range}</div>
+                    <div class="bar" style="width: ${percentage}%"></div>
+                    <div class="bar-value">${count}</div>
+                </div>
+            `;
+        });
+        
+        chartEl.innerHTML = html;
+    }
+    
+    generateRatingChart() {
+        const ratingBuckets = { '1-3': 0, '4-6': 0, '7-8': 0, '9-10': 0, 'Unrated': 0 };
+        
+        this.games.forEach(game => {
+            if (!game.personalRating) {
+                ratingBuckets['Unrated']++;
+            } else {
+                const rating = game.personalRating;
+                if (rating <= 3) ratingBuckets['1-3']++;
+                else if (rating <= 6) ratingBuckets['4-6']++;
+                else if (rating <= 8) ratingBuckets['7-8']++;
+                else ratingBuckets['9-10']++;
+            }
+        });
+        
+        const chartEl = document.getElementById('ratingChart');
+        let html = '';
+        const maxCount = Math.max(...Object.values(ratingBuckets));
+        
+        Object.entries(ratingBuckets).forEach(([range, count]) => {
+            const percentage = maxCount > 0 ? (count / maxCount) * 100 : 0;
+            html += `
+                <div class="chart-bar">
+                    <div class="bar-label">${range}</div>
+                    <div class="bar" style="width: ${percentage}%"></div>
+                    <div class="bar-value">${count}</div>
+                </div>
+            `;
+        });
+        
+        chartEl.innerHTML = html;
+    }
+    
+    exportAnalytics() {
+        const analytics = this.calculateAnalytics();
+        const exportData = JSON.stringify(analytics, null, 2);
+        const filename = `bgg-analytics-${this.currentUsername}-${new Date().toISOString().split('T')[0]}.json`;
+        
+        const blob = new Blob([exportData], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        this.showStatusMessage('Analytics exported successfully', 'success');
+    }
+    
+    closeAnalyticsDashboard() {
+        const modal = document.querySelector('.analytics-modal');
+        if (modal) {
+            modal.remove();
+        }
+    }
+    
+    // Social sharing functionality
+    addSocialSharing(game) {
+        const shareButton = document.createElement('button');
+        shareButton.className = 'share-btn';
+        shareButton.innerHTML = '📲 Share';
+        shareButton.onclick = () => this.shareGame(game);
+        
+        const gameCard = document.getElementById('gameCard');
+        const existingShareBtn = gameCard.querySelector('.share-btn');
+        if (existingShareBtn) {
+            existingShareBtn.remove();
+        }
+        
+        gameCard.appendChild(shareButton);
+    }
+    
+    async shareGame(game) {
+        const shareData = {
+            title: `🎲 ${game.name}`,
+            text: `Check out this board game: ${game.name} (${game.yearPublished})\n\n` +
+                  `Players: ${game.minPlayers}-${game.maxPlayers} | ` +
+                  `Time: ${game.playTime} min | ` +
+                  `Complexity: ${game.complexity}/5\n` +
+                  (game.personalRating ? `My Rating: ${game.personalRating}/10\n` : '') +
+                  `BGG Rating: ${game.bggRating || 'N/A'}\n\n` +
+                  `Selected by Board Game Picker`,
+            url: `https://boardgamegeek.com/boardgame/${game.id}`
+        };
+        
+        // Use Web Share API if available
+        if (navigator.share && navigator.canShare && navigator.canShare(shareData)) {
+            try {
+                await navigator.share(shareData);
+                console.log('✅ Game shared successfully');
+                return;
+            } catch (error) {
+                if (error.name !== 'AbortError') {
+                    console.error('Error sharing:', error);
+                }
+            }
+        }
+        
+        // Fallback to custom share modal
+        this.showShareModal(game, shareData);
+    }
+    
+    showShareModal(game, shareData) {
+        const modal = document.createElement('div');
+        modal.className = 'share-modal';
+        
+        const gameUrl = `https://boardgamegeek.com/boardgame/${game.id}`;
+        const encodedText = encodeURIComponent(shareData.text);
+        const encodedUrl = encodeURIComponent(gameUrl);
+        const encodedTitle = encodeURIComponent(shareData.title);
+        
+        modal.innerHTML = `
+            <div class="share-content">
+                <h3>Share ${game.name}</h3>
+                
+                <div class="share-preview">
+                    <h4>${game.name}</h4>
+                    <p>Players: ${game.minPlayers}-${game.maxPlayers} | Time: ${game.playTime} min | Complexity: ${game.complexity}/5</p>
+                    ${game.personalRating ? `<p>My Rating: ${game.personalRating}/10</p>` : ''}
+                    <p>BGG Rating: ${game.bggRating || 'N/A'}</p>
+                </div>
+                
+                <div class="share-buttons">
+                    <a href="https://twitter.com/intent/tweet?text=${encodedText}&url=${encodedUrl}" 
+                       target="_blank" class="share-twitter">
+                        🐦 Twitter
+                    </a>
+                    
+                    <a href="https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}&quote=${encodedText}" 
+                       target="_blank" class="share-facebook">
+                        🟦 Facebook
+                    </a>
+                    
+                    <a href="https://www.reddit.com/submit?url=${encodedUrl}&title=${encodedTitle}" 
+                       target="_blank" class="share-reddit">
+                        🟠 Reddit
+                    </a>
+                    
+                    <button onclick="window.boardGamePickerInstance.copyToClipboard('${gameUrl.replace(/'/g, "\\'")}')"
+                            class="share-copy">
+                        📋 Copy Link
+                    </button>
+                </div>
+                
+                <div class="share-text-area">
+                    <h4>Share Text:</h4>
+                    <textarea readonly onclick="this.select()">${shareData.text}\n\n${gameUrl}</textarea>
+                </div>
+                
+                <div class="modal-buttons">
+                    <button class="btn-secondary" onclick="window.boardGamePickerInstance.closeShareModal()">Close</button>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+    }
+    
+    async copyToClipboard(text) {
+        try {
+            await navigator.clipboard.writeText(text);
+            this.showStatusMessage('Link copied to clipboard!', 'success');
+        } catch (error) {
+            console.error('Failed to copy:', error);
+            this.showStatusMessage('Failed to copy link', 'error');
+        }
+    }
+    
+    closeShareModal() {
+        const modal = document.querySelector('.share-modal');
+        if (modal) {
+            modal.remove();
+        }
+    }
+    
+    // URL parameter handling for shared games
+    handleUrlParameters() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const gameId = urlParams.get('game');
+        const action = urlParams.get('action');
+        
+        if (action === 'quick-roll' && this.games.length > 0) {
+            // Quick roll from PWA shortcut
+            setTimeout(() => this.rollDice(), 1000);
+        }
+        
+        if (gameId && this.games.length > 0) {
+            // Show specific game from shared link
+            const game = this.games.find(g => g.id === gameId);
+            if (game) {
+                setTimeout(() => this.displaySelectedGame(game), 1000);
+            }
+        }
+    }
 }
 
 // Initialize the app when the DOM is loaded
@@ -1272,9 +2410,43 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Add some utility functions for debugging
 window.debugBGP = {
-    clearCache: () => {
-        localStorage.removeItem('bgg-collection-data');
-        location.reload();
+    testProxies: async () => {
+        const app = window.boardGamePickerInstance;
+        if (app) {
+            await app.checkAllProxyHealth();
+            console.log('Proxy health data:', Object.fromEntries(app.proxyHealthCache));
+        }
+    },
+    setCustomProxy: (url) => {
+        localStorage.setItem('bgg-custom-proxy-url', url);
+        console.log(`Custom proxy set to: ${url}`);
+        console.log('Reload the page to use the custom proxy');
+    },
+    clearIndexedDB: async () => {
+        const app = window.boardGamePickerInstance;
+        if (app) {
+            await app.clearIndexedDB();
+            localStorage.removeItem('bgg-collection-data');
+            console.log('🗑️ All cache cleared');
+            location.reload();
+        }
+    },
+    getIndexedDBData: async () => {
+        const app = window.boardGamePickerInstance;
+        if (app && app.db) {
+            const collection = await app.getFromIndexedDB('collection');
+            console.log('IndexedDB collection data:', collection);
+            return collection;
+        }
+        return null;
+    },
+    clearCache: async () => {
+        const app = window.boardGamePickerInstance;
+        if (app) {
+            await app.clearIndexedDB();
+            localStorage.removeItem('bgg-collection-data');
+            location.reload();
+        }
     },
     getCache: () => {
         const data = localStorage.getItem('bgg-collection-data');

@@ -1,0 +1,46 @@
+{
+  "name": "Board Game Picker",
+  "short_name": "BGG Picker",
+  "description": "Intelligently select your next board game from your BoardGameGeek collection",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#1a1a2e",
+  "theme_color": "#6366f1",
+  "orientation": "portrait-primary",
+  "categories": ["games", "entertainment", "productivity"],
+  "icons": [
+    {
+      "src": "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTkyIiBoZWlnaHQ9IjE5MiIgdmlld0JveD0iMCAwIDE5MiAxOTIiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIxOTIiIGhlaWdodD0iMTkyIiByeD0iMjQiIGZpbGw9InVybCgjZ3JhZGllbnQwX2xpbmVhcl8xXzEpIi8+CjxwYXRoIGQ9Ik05NiA2NEw4MCA4MEw5NiA5NkwxMTIgODBaIiBmaWxsPSJ3aGl0ZSIvPgo8cGF0aCBkPSJNOTYgMTA0TDgwIDEyMEw5NiAxMzZMMTEyIDEyMFoiIGZpbGw9IndoaXRlIi8+CjxwYXRoIGQ9Ik02NCA5Nkw0OCAxMTJMNjQgMTI4TDgwIDExMloiIGZpbGw9IndoaXRlIi8+CjxwYXRoIGQ9Ik0xMjggOTZMMTEyIDExMkwxMjggMTI4TDE0NCAxMTJaIiBmaWxsPSJ3aGl0ZSIvPgo8cGF0aCBkPSJNNzIgNzJMNTYgODhMNzIgMTA0TDg4IDg4WiIgZmlsbD0id2hpdGUiLz4KPHA+cGF0aCBkPSJNMTIwIDcyTDEwNCA4OEwxMjAgMTA0TDEzNiA4OFoiIGZpbGw9IndoaXRlIi8+CjxkZWZzPgo8bGluZWFyR3JhZGllbnQgaWQ9ImdyYWRpZW50MF9saW5lYXJfMV8xIiB4MT0iMCIgeTE9IjAiIHgyPSIxOTIiIHkyPSIxOTIiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KPHN0b3Agc3RvcC1jb2xvcj0iIzY2N0VFQSIvPgo8c3RvcCBvZmZzZXQ9IjAuNSIgc3RvcC1jb2xvcj0iIzc2NEJBMiIvPgo8c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiNGMDkzRkIiLz4KPC9saW5lYXJHcmFkaWVudD4KPC9kZWZzPgo8L3N2Zz4K",
+      "sizes": "192x192",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNTEyIiBoZWlnaHQ9IjUxMiIgdmlld0JveD0iMCAwIDUxMiA1MTIiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSI1MTIiIGhlaWdodD0iNTEyIiByeD0iNjQiIGZpbGw9InVybCgjZ3JhZGllbnQwX2xpbmVhcl8xXzEpIi8+CjxwYXRoIGQ9Ik0yNTYgMTcwTDIxMyAxOTJMMjU2IDI1NkwyOTkgMjEzWiIgZmlsbD0id2hpdGUiLz4KPHA+cGF0aCBkPSJNMjU2IDI3OEwyMTMgMzIwTDI1NiAzNjJMMjk5IDMyMFoiIGZpbGw9IndoaXRlIi8+CjxwYXRoIGQ9Ik0xNzAgMjU2TDEyOCAyOTlMMTcwIDM0MkwyMTMgMjk5WiIgZmlsbD0id2hpdGUiLz4KPHA+cGF0aCBkPSJNMzQyIDI1NkwyOTkgMjk5TDM0MiAzNDJMMzg0IDI5OVoiIGZpbGw9IndoaXRlIi8+CjxwYXRoIGQ9Ik0xOTIgMTkyTDE0OSAyMzVMMTkyIDI3OEwyMzUgMjM1WiIgZmlsbD0id2hpdGUiLz4KPHA+cGF0aCBkPSJNMzIwIDE5MkwyNzggMjM1TDMyMCAyNzhMMzYyIDIzNVoiIGZpbGw9IndoaXRlIi8+CjxkZWZzPgo8bGluZWFyR3JhZGllbnQgaWQ9ImdyYWRpZW50MF9saW5lYXJfMV8xIiB4MT0iMCIgeTE9IjAiIHgyPSI1MTIiIHkyPSI1MTIiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KPHN0b3Agc3RvcC1jb2xvcj0iIzY2N0VFQSIvPgo8c3RvcCBvZmZzZXQ9IjAuNSIgc3RvcC1jb2xvcj0iIzc2NEJBMiIvPgo8c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiNGMDkzRkIiLz4KPC9saW5lYXJHcmFkaWVudD4KPC9kZWZzPgo8L3N2Zz4K",
+      "sizes": "512x512",
+      "type": "image/svg+xml"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIwIiBoZWlnaHQ9IjU2OCIgdmlld0JveD0iMCAwIDMyMCA1NjgiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIzMjAiIGhlaWdodD0iNTY4IiBmaWxsPSJ1cmwoI2dyYWRpZW50MF9saW5lYXJfMV8xKSIvPgo8cmVjdCB4PSIyNCIgeT0iMjQiIHdpZHRoPSIyNzIiIGhlaWdodD0iNTIwIiByeD0iMTYiIGZpbGw9InJnYmEoMjU1LCAyNTUsIDI1NSwgMC4xKSIgc3Ryb2tlPSJyZ2JhKDI1NSwgMjU1LCAyNTUsIDAuMikiLz4KPHA+dGV4dCB4PSIxNjAiIHk9IjgwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSJ3aGl0ZSIgZm9udC1mYW1pbHk9InNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMjQiIGZvbnQtd2VpZ2h0PSJib2xkIj5Cb2FyZCBHYW1lIFBpY2tlcjwvdGV4dD4KPHA+dGV4dCB4PSIxNjAiIHk9IjEwNCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0id2hpdGUiIGZvbnQtZmFtaWx5PSJzYW5zLXNlcmlmIiBmb250LXNpemU9IjE0Ij5JbnRlbGxpZ2VudGx5IHNlbGVjdCB5b3VyIG5leHQgZ2FtZTwvdGV4dD4KPHJlY3QgeD0iNDgiIHk9IjE0NCIgd2lkdGg9IjIyNCIgaGVpZ2h0PSI0MCIgcng9IjgiIGZpbGw9InJnYmEoMjU1LCAyNTUsIDI1NSwgMC4xKSIgc3Ryb2tlPSJyZ2JhKDI1NSwgMjU1LCAyNTUsIDAuMikiLz4KPHA+dGV4dCB4PSI1NiIgeT0iMTY4IiBmaWxsPSJyZ2JhKDI1NSwgMjU1LCAyNTUsIDAuNykiIGZvbnQtZmFtaWx5PSJzYW5zLXNlcmlmIiBmb250LXNpemU9IjE0Ij5FbnRlciB5b3VyIEJHRyB1c2VybmFtZTwvdGV4dD4KPGRlZnM+CjxsaW5lYXJHcmFkaWVudCBpZD0iZ3JhZGllbnQwX2xpbmVhcl8xXzEiIHgxPSIwIiB5MT0iMCIgeDI9IjMyMCIgeTI9IjU2OCIgZ3JhZGllbnRVbml0cz0idXNlclNwYWNlT25Vc2UiPgo8c3RvcCBzdG9wLWNvbG9yPSIjNjY3RUVBIi8+CjxzdG9wIG9mZnNldD0iMC41IiBzdG9wLWNvbG9yPSIjNzY0QkEyIi8+CjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iI0YwOTNGQiIvPgo8L2xpbmVhckdyYWRpZW50Pgo8L2RlZnM+Cjwvc3ZnPgo=",
+      "sizes": "320x568",
+      "type": "image/svg+xml",
+      "form_factor": "narrow"
+    }
+  ],
+  "prefer_related_applications": false,
+  "shortcuts": [
+    {
+      "name": "Quick Roll",
+      "short_name": "Roll",
+      "description": "Roll for a random game",
+      "url": "/?action=quick-roll",
+      "icons": [
+        {
+          "src": "/dice-icon.svg",
+          "sizes": "96x96"
+        }
+      ]
+    }
+  ]
+}

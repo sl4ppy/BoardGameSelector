@@ -4,6 +4,18 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Board Game Picker</title>
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#6366f1">
+    <meta name="background-color" content="#1a1a2e">
+    
+    <!-- iOS PWA Support -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="BGG Picker">
+    <link rel="apple-touch-icon" href="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTkyIiBoZWlnaHQ9IjE5MiIgdmlld0JveD0iMCAwIDE5MiAxOTIiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIxOTIiIGhlaWdodD0iMTkyIiByeD0iMjQiIGZpbGw9InVybCgjZ3JhZGllbnQwX2xpbmVhcl8xXzEpIi8+CjxwYXRoIGQ9Ik05NiA2NEw4MCA4MEw5NiA5NkwxMTIgODBaIiBmaWxsPSJ3aGl0ZSIvPgo8cGF0aCBkPSJNOTYgMTA0TDgwIDEyMEw5NiAxMzZMMTEyIDEyMFoiIGZpbGw9IndoaXRlIi8+CjxwYXRoIGQ9Ik02NCA5Nkw0OCAxMTJMNjQgMTI4TDgwIDExMloiIGZpbGw9IndoaXRlIi8+CjxwYXRoIGQ9Ik0xMjggOTZMMTEyIDExMkwxMjggMTI4TDE0NCAxMTJaIiBmaWxsPSJ3aGl0ZSIvPgo8cGF0aCBkPSJNNzIgNzJMNTYgODhMNzIgMTA0TDg4IDg4WiIgZmlsbD0id2hpdGUiLz4KPHA+cGF0aCBkPSJNMTIwIDcyTDEwNCA4OEwxMjAgMTA0TDEzNiA4OFoiIGZpbGw9IndoaXRlIi8+CjxkZWZzPgo8bGluZWFyR3JhZGllbnQgaWQ9ImdyYWRpZW50MF9saW5lYXJfMV8xIiB4MT0iMCIgeTE9IjAiIHgyPSIxOTIiIHkyPSIxOTIiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KPHN0b3Agc3RvcC1jb2xvcj0iIzY2N0VFQSIvPgo8c3RvcCBvZmZzZXQ9IjAuNSIgc3RvcC1jb2xvcj0iIzc2NEJBMiIvPgo8c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiNGMDkzRkIiLz4KPC9saW5lYXJHcmFkaWVudD4KPC9kZWZzPgo8L3N2Zz4K">
+    
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎲</text></svg>">
     <link rel="stylesheet" href="style.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -31,6 +43,9 @@
                         <button id="fetchCollection" class="fetch-btn">
                             <span class="btn-text">Sync Collection</span>
                             <div class="spinner hidden"></div>
+                        </button>
+                        <button class="settings-btn" onclick="window.boardGamePickerInstance?.showAdvancedSettings()" title="Advanced Settings">
+                            ⚙️
                         </button>
                     </div>
                 </div>
