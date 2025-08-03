@@ -129,8 +129,8 @@ class BoardGamePicker {
                         
                         const ageHours = Math.floor((now - cachedData.timestamp) / (60 * 60 * 1000));
                         const cacheInfo = isLocalDevelopment ? 
-                            `✅ Loaded ${this.games.length} games from IndexedDB cache for ${this.currentUsername}` :
-                            `✅ Loaded ${this.games.length} games from cache for ${this.currentUsername} (${ageHours}h old)`;
+                            `✅ Loaded ${this.games.length} games from local IndexedDB cache for ${this.currentUsername} (offline mode)` :
+                            `✅ Loaded ${this.games.length} games from local cache for ${this.currentUsername} (cached ${ageHours}h ago)`;
                         
                         this.showCollectionStatus(cacheInfo, 'success');
                         this.showGameSection();
@@ -173,8 +173,8 @@ class BoardGamePicker {
                     
                     const ageHours = Math.floor((now - data.timestamp) / (60 * 60 * 1000));
                     const cacheInfo = isLocalDevelopment ? 
-                        `✅ Loaded ${this.games.length} games from localStorage cache for ${this.currentUsername}` :
-                        `✅ Loaded ${this.games.length} games from cache for ${this.currentUsername} (${ageHours}h old)`;
+                        `✅ Loaded ${this.games.length} games from localStorage cache for ${this.currentUsername} (fallback mode)` :
+                        `✅ Loaded ${this.games.length} games from localStorage cache for ${this.currentUsername} (cached ${ageHours}h ago)`;
                     
                     this.showCollectionStatus(cacheInfo, 'success');
                     this.showGameSection();
@@ -518,7 +518,7 @@ class BoardGamePicker {
         this.lastApiRequest = now;
         this.currentUsername = username;
         this.toggleLoadingState(true);
-        this.showCollectionStatus('🔄 Fetching your collection...', 'loading');
+        this.showCollectionStatus('🔄 Connecting to BoardGameGeek API...', 'loading');
 
         try {
             // First, get the collection list
@@ -576,7 +576,7 @@ class BoardGamePicker {
                 }
             }
 
-            this.showCollectionStatus(`🔄 Processing ${items.length} games...`, 'loading');
+            this.showCollectionStatus(`🔄 Processing ${items.length} games from BGG API...`, 'loading');
 
             // Parse the collection
             this.games = Array.from(items).map(item => this.parseGameItem(item));
@@ -585,7 +585,7 @@ class BoardGamePicker {
             await this.enrichGameData();
 
             this.saveCollectionData();
-            this.showCollectionStatus(`✅ Successfully loaded ${this.games.length} games!`, 'success');
+            this.showCollectionStatus(`✅ Successfully loaded ${this.games.length} games from BoardGameGeek API (live data)`, 'success');
             this.showGameSection();
             
             // Set default filter to "owned" in development mode after loading collection
@@ -699,6 +699,9 @@ class BoardGamePicker {
             try {
                 console.log(`🌐 Attempt ${retryCount + 1}/${maxRetries} with ${proxy.name}:`, fullUrl);
                 
+                // Update status to show which proxy we're using
+                this.showCollectionStatus(`🔄 Connecting via ${proxy.name} proxy...`, 'loading');
+                
                 // Different headers for different proxies
                 let headers = {
                     'Accept': 'application/json, text/plain, */*'
@@ -718,6 +721,11 @@ class BoardGamePicker {
                 
                 console.log('📡 Response status:', response.status, response.statusText);
                 console.log('📋 Response headers:', Object.fromEntries(response.headers.entries()));
+                
+                // Check if response is from service worker cache
+                if (response.headers.get('X-Served-From') === 'cache') {
+                    this.showCollectionStatus(`🔄 Loading from service worker cache (offline mode)...`, 'loading');
+                }
                 
                 if (!response.ok) {
                     const errorText = await response.text();
@@ -888,11 +896,21 @@ class BoardGamePicker {
         }
         
         // Process batches with queue
-        const batchPromises = batches.map(batch => 
-            this.queueRequest(() => this.fetchBatchGameDetails(batch))
-        );
-        
-        await Promise.all(batchPromises);
+        if (batches.length > 0) {
+            this.showCollectionStatus(`🔄 Fetching detailed data for ${gamesNeedingData.length} games...`, 'loading');
+            
+            let completedBatches = 0;
+            const batchPromises = batches.map((batch, index) => 
+                this.queueRequest(async () => {
+                    await this.fetchBatchGameDetails(batch);
+                    completedBatches++;
+                    const progress = Math.round((completedBatches / batches.length) * 100);
+                    this.showCollectionStatus(`🔄 Loading game details... ${progress}% complete (${completedBatches}/${batches.length} batches)`, 'loading');
+                })
+            );
+            
+            await Promise.all(batchPromises);
+        }
     }
     
     async fetchBatchGameDetails(games) {
