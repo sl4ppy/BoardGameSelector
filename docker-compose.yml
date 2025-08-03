@@ -15,6 +15,7 @@ services:
       # For development, you can mount the entire directory
       # - .:/app
       # - /app/server/node_modules
+    user: "${UID:-1000}:${GID:-1000}"
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]

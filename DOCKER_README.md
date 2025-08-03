@@ -18,13 +18,38 @@ This guide explains how to deploy Board Game Selector with server-side caching u
    cd BoardGameSelector
    ```
 
-2. **Build and run with Docker Compose**
+2. **Deploy using the provided script (Recommended)**
    ```bash
-   docker-compose up -d
+   ./deploy.sh
    ```
 
-3. **Access the application**
+3. **Or manually with Docker**
+   ```bash
+   # Build the image
+   docker build -t boardgame-selector .
+   
+   # Create database directory
+   mkdir -p database
+   
+   # Run the container
+   docker run -d \
+     --name boardgame-selector \
+     -p 3000:3000 \
+     -v $(pwd)/database:/app/database \
+     --user $(id -u):$(id -g) \
+     --restart unless-stopped \
+     boardgame-selector
+   ```
+
+4. **Access the application**
    Open http://localhost:3000 in your browser
+
+## Docker Compose (Alternative)
+
+If you have docker-compose v2+, you can use:
+```bash
+UID=$(id -u) GID=$(id -g) docker-compose up -d
+```
 
 ## Manual Docker Build
 
