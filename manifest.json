@@ -4,8 +4,8 @@
   "description": "Intelligently select your next board game from your BoardGameGeek collection",
   "start_url": "./",
   "display": "standalone",
-  "background_color": "#1a1a2e",
-  "theme_color": "#6366f1",
+  "background_color": "#1a1c1f",
+  "theme_color": "#1a1c1f",
   "orientation": "portrait-primary",
   "categories": ["games", "entertainment", "productivity"],
   "icons": [
@@ -37,7 +37,7 @@
       "url": "/?action=quick-roll",
       "icons": [
         {
-          "src": "/dice-icon.svg",
+          "src": "/spin-icon.svg",
           "sizes": "96x96"
         }
       ]
