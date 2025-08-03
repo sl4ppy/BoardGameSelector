@@ -72,7 +72,10 @@ class BGGApiService {
             userRating: item.stats[0].rating[0].$.value !== 'N/A' ? 
                 parseFloat(item.stats[0].rating[0].$.value) : null,
             complexity: item.stats[0].rating[0].averageweight ? 
-                parseFloat(item.stats[0].rating[0].averageweight[0].$.value) : null
+                parseFloat(item.stats[0].rating[0].averageweight[0].$.value) : null,
+            // Add ownership status - since we're filtering by &own=1 in the URL, all returned games are owned
+            owned: true,
+            wishlist: item.status?.[0]?.$.wishlist === '1' || false
         }));
         
         return games;

@@ -532,6 +532,7 @@ class BoardGamePicker {
                     
                     if (result) {
                         this.games = result.games;
+                        console.log(`🎮 Loaded ${this.games.length} games from backend:`, this.games.slice(0, 2));
                         
                         // Update status message based on source
                         const statusMsg = result.source === 'cache' 
@@ -541,6 +542,17 @@ class BoardGamePicker {
                         this.saveCollectionData();
                         this.showCollectionStatus(statusMsg, 'success');
                         this.showGameSection();
+                        
+                        // Set default filter to "owned" in development mode after loading collection
+                        const isLocalDevelopment = window.location.hostname === 'localhost' || 
+                                                 window.location.hostname === '127.0.0.1' || 
+                                                 window.location.protocol === 'file:';
+                        if (isLocalDevelopment) {
+                            const gameTypeFilter = document.getElementById('gameType');
+                            if (gameTypeFilter.value === '') {
+                                gameTypeFilter.value = 'owned';
+                            }
+                        }
                         
                         // Apply filters
                         this.applyFilters();
