@@ -48,7 +48,11 @@ class BoardGamePicker {
 
     initializeEventListeners() {
         // Username and fetch functionality
-        document.getElementById('fetchCollection').addEventListener('click', () => this.fetchUserCollection());
+        document.getElementById('fetchCollection').addEventListener('click', (e) => {
+            // Hold Shift to force refresh from BGG
+            const forceRefresh = e.shiftKey;
+            this.fetchUserCollection(forceRefresh);
+        });
         document.getElementById('bggUsername').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') this.fetchUserCollection();
         });
@@ -474,7 +478,7 @@ class BoardGamePicker {
         }
     }
 
-    async fetchUserCollection() {
+    async fetchUserCollection(forceRefresh = false) {
         const username = document.getElementById('bggUsername').value.trim();
         if (!username) {
             this.showCollectionStatus('⚠️ Please enter a BGG username', 'error');
@@ -521,7 +525,38 @@ class BoardGamePicker {
         this.showCollectionStatus('🔄 Connecting to BoardGameGeek API...', 'loading');
 
         try {
-            // First, get the collection list
+            // Try backend API first if available
+            if (window.apiClient && window.apiClient.hasBackend) {
+                try {
+                    const result = await window.apiClient.fetchCollection(username, forceRefresh);
+                    
+                    if (result) {
+                        this.games = result.games;
+                        
+                        // Update status message based on source
+                        const statusMsg = result.source === 'cache' 
+                            ? `✅ Loaded ${this.games.length} games from server cache`
+                            : `✅ Successfully loaded ${this.games.length} games from BoardGameGeek API (via server)`;
+                        
+                        this.saveCollectionData();
+                        this.showCollectionStatus(statusMsg, 'success');
+                        this.showGameSection();
+                        
+                        // Apply filters
+                        this.applyFilters();
+                        return;
+                    }
+                } catch (error) {
+                    // If backend fails with BGG processing, propagate it
+                    if (error.message.includes('BGG is processing')) {
+                        throw error;
+                    }
+                    // Otherwise fall back to direct API
+                    console.warn('Backend API failed, falling back to direct BGG API:', error);
+                }
+            }
+            
+            // Fall back to direct BGG API
             const collectionUrl = `${this.BGG_API_BASE}/collection?username=${encodeURIComponent(username)}&stats=1&excludesubtype=boardgameexpansion`;
             console.log('🔗 Fetching BGG collection from:', collectionUrl);
             
