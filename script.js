@@ -504,6 +504,16 @@ class BoardGamePicker {
             return;
         }
 
+        // Clear any existing retry timers
+        if (this.processingRetryTimeout) {
+            clearTimeout(this.processingRetryTimeout);
+            this.processingRetryTimeout = null;
+        }
+        if (this.processingCountdownInterval) {
+            clearInterval(this.processingCountdownInterval);
+            this.processingCountdownInterval = null;
+        }
+        
         this.isLoading = true;
         this.lastApiRequest = now;
         this.currentUsername = username;
@@ -593,6 +603,40 @@ class BoardGamePicker {
 
         } catch (error) {
             console.error('Error fetching collection:', error);
+            
+            // Handle BGG processing message with automatic retry
+            if (error.message.includes('BGG is processing your collection')) {
+                this.showCollectionStatus('⏳ BGG is processing your collection. Retrying in 30 seconds...', 'warning');
+                
+                // Set up automatic retry after 30 seconds
+                this.processingRetryTimeout = setTimeout(() => {
+                    console.log('🔄 Retrying collection fetch after BGG processing delay...');
+                    this.fetchUserCollection();
+                }, 30000);
+                
+                // Show countdown
+                let countdown = 30;
+                this.processingCountdownInterval = setInterval(() => {
+                    countdown--;
+                    if (countdown > 0) {
+                        this.showCollectionStatus(`⏳ BGG is processing your collection. Retrying in ${countdown} seconds...`, 'warning');
+                    } else {
+                        clearInterval(this.processingCountdownInterval);
+                    }
+                }, 1000);
+                
+                return;
+            }
+            
+            // Clear any existing retry timers
+            if (this.processingRetryTimeout) {
+                clearTimeout(this.processingRetryTimeout);
+                this.processingRetryTimeout = null;
+            }
+            if (this.processingCountdownInterval) {
+                clearInterval(this.processingCountdownInterval);
+                this.processingCountdownInterval = null;
+            }
             
             let errorMessage = `❌ Error: ${error.message}`;
             
