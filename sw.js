@@ -1,6 +1,6 @@
 // Board Game Picker Service Worker
-const CACHE_NAME = 'bgg-picker-v1.6.0';
-const STATIC_CACHE = 'bgg-picker-static-v1.6.0';
+const CACHE_NAME = 'bgg-picker-v1.6.1';
+const STATIC_CACHE = 'bgg-picker-static-v1.6.1';
 
 // Files to cache for offline functionality
 const STATIC_FILES = [
@@ -12,13 +12,17 @@ const STATIC_FILES = [
     'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap'
 ];
 
-// BGG API patterns to cache
+// BGG API patterns to cache (including all CORS proxies)
 const BGG_API_PATTERNS = [
     /^https:\/\/boardgamegeek\.com\/xmlapi2\//,
     /^https:\/\/api\.allorigins\.win\//,
     /^https:\/\/thingproxy\.freeboard\.io\//,
     /^https:\/\/api\.codetabs\.com\//,
-    /^https:\/\/corsproxy\.io\//
+    /^https:\/\/corsproxy\.io\//,
+    /^https:\/\/cors-proxy\.htmldriven\.com\//,
+    /^https:\/\/proxy\.cors\.sh\//,
+    /^https:\/\/cors\.bridged\.cc\//,
+    /^https:\/\/cors-anywhere\.herokuapp\.com\//
 ];
 
 self.addEventListener('install', event => {
