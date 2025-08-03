@@ -53,8 +53,17 @@ class BoardGamePicker {
             const forceRefresh = e.shiftKey;
             this.fetchUserCollection(forceRefresh);
         });
+        document.getElementById('syncPlays').addEventListener('click', () => {
+            this.syncPlaysData();
+        });
+        document.getElementById('fullSync').addEventListener('click', () => {
+            this.fullSyncData();
+        });
         document.getElementById('bggUsername').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') this.fetchUserCollection();
+        });
+        document.getElementById('bggUsername').addEventListener('input', () => {
+            this.validateUsernameAndUpdateButtons();
         });
 
         // Filter controls
@@ -66,6 +75,9 @@ class BoardGamePicker {
         // Roll dice functionality
         document.getElementById('rollDice').addEventListener('click', () => this.rollDice());
         document.getElementById('rollAgain').addEventListener('click', () => this.rollDice());
+
+        // Collection table functionality
+        document.getElementById('toggleTable').addEventListener('click', () => this.toggleCollectionTable());
 
         // Weighting button functionality
         document.querySelectorAll('.weight-btn').forEach(btn => {
@@ -238,6 +250,9 @@ class BoardGamePicker {
                 usernameInput.setAttribute('placeholder', 'flapJ4cks (dev default)');
                 console.log('🛠️ Development mode: Set default BGG username to "flapJ4cks"');
             }
+            
+            // Validate username and update buttons after setting defaults
+            this.validateUsernameAndUpdateButtons();
 
             // Set default filter to "owned" games only in development
             const gameTypeFilter = document.getElementById('gameType');
@@ -712,6 +727,288 @@ class BoardGamePicker {
         }
     }
 
+    async syncPlaysData() {
+        if (!this.currentUsername) {
+            this.showCollectionStatus('❌ Please enter a username first', 'error');
+            return;
+        }
+
+        if (this.games.length === 0) {
+            this.showCollectionStatus('❌ Please sync your collection first', 'error');
+            return;
+        }
+
+        try {
+            // Show loading state
+            const button = document.getElementById('syncPlays');
+            const buttonText = button.querySelector('.btn-text');
+            const spinner = button.querySelector('.spinner');
+            
+            buttonText.textContent = 'Syncing Plays...';
+            spinner.classList.remove('hidden');
+            button.disabled = true;
+
+            this.showCollectionStatus('🔄 Syncing play data from BGG...', 'loading');
+
+            // Try backend API first if available
+            if (window.apiClient && window.apiClient.hasBackend) {
+                try {
+                    const data = await window.apiClient.syncPlaysData(this.currentUsername);
+                    
+                    if (data) {
+                        this.showCollectionStatus(`✅ Successfully synced play data for ${data.updated} games`, 'success');
+                        
+                        // Clear local play cache to force refresh
+                        this.playDataCache.clear();
+                        
+                        // Update any visible table
+                        const tableContainer = document.getElementById('collectionTableContainer');
+                        if (!tableContainer.classList.contains('hidden')) {
+                            await this.populateCollectionTable();
+                        }
+                        
+                        return;
+                    } else {
+                        console.log('Backend plays sync failed, falling back to direct sync');
+                    }
+                } catch (error) {
+                    console.log('Backend plays sync error:', error.message);
+                }
+            }
+
+            // Fallback to direct BGG API sync
+            let updatedCount = 0;
+            const gamesWithPlays = this.games.filter(game => game.numPlays > 0);
+            
+            this.showCollectionStatus(`🔄 Syncing ${gamesWithPlays.length} games with play data...`, 'loading');
+
+            for (let i = 0; i < gamesWithPlays.length; i++) {
+                const game = gamesWithPlays[i];
+                
+                try {
+                    // Update progress
+                    if (i % 5 === 0) { // Update every 5 games to avoid too frequent updates
+                        this.showCollectionStatus(`🔄 Syncing play data... (${i + 1}/${gamesWithPlays.length})`, 'loading');
+                    }
+
+                    // Queue the play data request
+                    const playData = await this.queueRequest(() => this.fetchPlayDataForGame(game));
+                    
+                    if (playData && playData.plays.length > 0) {
+                        const latestPlay = playData.plays[0];
+                        const playDate = latestPlay.getAttribute('date');
+                        
+                        if (playDate) {
+                            const lastPlayDate = new Date(playDate);
+                            const resultText = this.formatDateForDisplay(lastPlayDate);
+                            game.lastPlayDate = lastPlayDate;
+                            
+                            // Update caches
+                            const cacheKey = `${this.currentUsername}-${game.id}`;
+                            this.playDataCache.set(cacheKey, resultText);
+                            
+                            // Cache in IndexedDB
+                            if (this.db) {
+                                const playDataEntry = {
+                                    cacheKey,
+                                    displayText: resultText,
+                                    lastPlayDate: lastPlayDate.toISOString(),
+                                    timestamp: Date.now(),
+                                    gameId: game.id,
+                                    gameName: game.name
+                                };
+                                try {
+                                    await this.saveToIndexedDB('playData', playDataEntry);
+                                } catch (indexedDBError) {
+                                    console.error('IndexedDB save error for play data:', indexedDBError);
+                                }
+                            }
+                            
+                            updatedCount++;
+                        }
+                    }
+                } catch (error) {
+                    console.warn(`Failed to sync play data for ${game.name}:`, error.message);
+                }
+            }
+
+            this.showCollectionStatus(`✅ Successfully synced play data for ${updatedCount} games`, 'success');
+            
+            // Update any visible table
+            const tableContainer = document.getElementById('collectionTableContainer');
+            if (!tableContainer.classList.contains('hidden')) {
+                await this.populateCollectionTable();
+            }
+
+        } catch (error) {
+            console.error('Error syncing plays data:', error);
+            this.showCollectionStatus(`❌ Error syncing plays: ${error.message}`, 'error');
+        } finally {
+            // Reset button state
+            const button = document.getElementById('syncPlays');
+            const buttonText = button.querySelector('.btn-text');
+            const spinner = button.querySelector('.spinner');
+            
+            buttonText.textContent = 'Sync Plays';
+            spinner.classList.add('hidden');
+            button.disabled = false;
+        }
+    }
+
+    async fullSyncData() {
+        if (!this.currentUsername) {
+            this.showCollectionStatus('❌ Please enter a username first', 'error');
+            return;
+        }
+
+        try {
+            // Show loading state
+            const button = document.getElementById('fullSync');
+            const buttonText = button.querySelector('.btn-text');
+            const spinner = button.querySelector('.spinner');
+            
+            buttonText.textContent = 'Full Syncing...';
+            spinner.classList.remove('hidden');
+            button.disabled = true;
+
+            this.showCollectionStatus('🔄 Starting full sync (collection + plays)...', 'loading');
+
+            // Try backend API first if available
+            if (window.apiClient && window.apiClient.hasBackend) {
+                try {
+                    const data = await window.apiClient.fullSyncData(this.currentUsername);
+                    
+                    if (data) {
+                        this.showCollectionStatus(`✅ Full sync completed: ${data.collection_games} games, ${data.plays_updated} play records updated`, 'success');
+                        
+                        // Update local data
+                        if (data.collection_data) {
+                            this.games = data.collection_data;
+                            this.saveCollectionData();
+                            this.showGameSection();
+                            this.applyFilters();
+                        }
+                        
+                        // Clear local play cache to force refresh
+                        this.playDataCache.clear();
+                        
+                        // Update any visible table
+                        const tableContainer = document.getElementById('collectionTableContainer');
+                        if (!tableContainer.classList.contains('hidden')) {
+                            await this.populateCollectionTable();
+                        }
+                        
+                        // Refresh user info to show updated sync date
+                        await this.displayUserInfo(this.currentUsername);
+                        
+                        return;
+                    } else {
+                        console.log('Backend full sync failed, falling back to sequential sync');
+                    }
+                } catch (error) {
+                    console.log('Backend full sync error:', error.message);
+                }
+            }
+
+            // Fallback to sequential sync: collection first, then plays
+            this.showCollectionStatus('🔄 Syncing collection data...', 'loading');
+            
+            // Step 1: Sync collection (force refresh)
+            await this.fetchUserCollection(true);
+            
+            if (this.games.length === 0) {
+                throw new Error('Failed to sync collection data');
+            }
+
+            // Step 2: Sync plays data
+            this.showCollectionStatus('🔄 Syncing play data for all games...', 'loading');
+            
+            let updatedCount = 0;
+            const gamesWithPlays = this.games.filter(game => game.numPlays > 0);
+            
+            for (let i = 0; i < gamesWithPlays.length; i++) {
+                const game = gamesWithPlays[i];
+                
+                try {
+                    // Update progress every 10 games
+                    if (i % 10 === 0) {
+                        this.showCollectionStatus(`🔄 Full sync: plays data (${i + 1}/${gamesWithPlays.length})...`, 'loading');
+                    }
+
+                    // Queue the play data request
+                    const playData = await this.queueRequest(() => this.fetchPlayDataForGame(game));
+                    
+                    if (playData && playData.plays.length > 0) {
+                        const latestPlay = playData.plays[0];
+                        const playDate = latestPlay.getAttribute('date');
+                        
+                        if (playDate) {
+                            const lastPlayDate = new Date(playDate);
+                            const resultText = this.formatDateForDisplay(lastPlayDate);
+                            game.lastPlayDate = lastPlayDate;
+                            
+                            // Update caches
+                            const cacheKey = `${this.currentUsername}-${game.id}`;
+                            this.playDataCache.set(cacheKey, resultText);
+                            
+                            // Cache in IndexedDB
+                            if (this.db) {
+                                const playDataEntry = {
+                                    cacheKey,
+                                    displayText: resultText,
+                                    lastPlayDate: lastPlayDate.toISOString(),
+                                    timestamp: Date.now(),
+                                    gameId: game.id,
+                                    gameName: game.name
+                                };
+                                try {
+                                    await this.saveToIndexedDB('playData', playDataEntry);
+                                } catch (indexedDBError) {
+                                    console.error('IndexedDB save error for play data:', indexedDBError);
+                                }
+                            }
+                            
+                            updatedCount++;
+                        }
+                    }
+                } catch (error) {
+                    console.warn(`Failed to sync play data for ${game.name}:`, error.message);
+                }
+            }
+
+            // Step 3: Fetch additional game details in batches
+            this.showCollectionStatus('🔄 Fetching detailed game information...', 'loading');
+            await this.enrichGameData();
+
+            this.showCollectionStatus(`✅ Full sync completed: ${this.games.length} games, ${updatedCount} play records updated`, 'success');
+            
+            // Update any visible table
+            const tableContainer = document.getElementById('collectionTableContainer');
+            if (!tableContainer.classList.contains('hidden')) {
+                await this.populateCollectionTable();
+            }
+            
+            // Refresh user info to show updated sync date (for fallback sync)
+            await this.displayUserInfo(this.currentUsername);
+
+        } catch (error) {
+            console.error('Error during full sync:', error);
+            this.showCollectionStatus(`❌ Full sync error: ${error.message}`, 'error');
+        } finally {
+            // Reset button state
+            const button = document.getElementById('fullSync');
+            const buttonText = button.querySelector('.btn-text');
+            const spinner = button.querySelector('.spinner');
+            
+            buttonText.textContent = 'Full Sync';
+            spinner.classList.add('hidden');
+            
+            // Only re-enable if username is still present
+            const username = document.getElementById('bggUsername').value.trim();
+            button.disabled = !username;
+        }
+    }
+
     async makeApiRequest(url, retryCount = 0) {
         const maxRetries = 3;
         const corsProxies = [
@@ -1042,6 +1339,78 @@ class BoardGamePicker {
     showGameSection() {
         document.getElementById('gameSection').classList.remove('hidden');
         document.getElementById('gameSection').classList.add('fade-in');
+        
+        // Show all buttons
+        document.getElementById('toggleTable').style.display = 'inline-flex';
+        document.getElementById('syncPlays').style.display = 'inline-flex';
+        document.getElementById('fullSync').style.display = 'inline-flex';
+    }
+
+    async validateUsernameAndUpdateButtons() {
+        const username = document.getElementById('bggUsername').value.trim();
+        const hasUsername = username.length > 0;
+        
+        // Enable/disable all sync buttons based on username presence
+        document.getElementById('fetchCollection').disabled = !hasUsername;
+        document.getElementById('syncPlays').disabled = !hasUsername;
+        document.getElementById('fullSync').disabled = !hasUsername;
+        
+        // Also update visual state
+        const buttons = ['fetchCollection', 'syncPlays', 'fullSync'];
+        buttons.forEach(buttonId => {
+            const button = document.getElementById(buttonId);
+            if (hasUsername) {
+                button.classList.remove('disabled-state');
+            } else {
+                button.classList.add('disabled-state');
+            }
+        });
+
+        // Fetch and display user info if username is provided
+        if (hasUsername && window.apiClient && window.apiClient.hasBackend) {
+            await this.displayUserInfo(username);
+        } else {
+            // Hide user info if no username or no backend
+            document.getElementById('userInfo').classList.add('hidden');
+        }
+    }
+
+    async displayUserInfo(username) {
+        try {
+            const userInfo = await window.apiClient.getUserInfo(username);
+            const userInfoContainer = document.getElementById('userInfo');
+            const userSyncStatus = document.getElementById('userSyncStatus');
+            
+            if (userInfo && userInfo.exists) {
+                let syncStatusText = '';
+                
+                if (userInfo.last_full_sync) {
+                    const lastSyncDate = new Date(userInfo.last_full_sync);
+                    const syncTimeAgo = this.formatDateForDisplay(lastSyncDate);
+                    syncStatusText = `📅 Last full sync: ${syncTimeAgo}`;
+                } else {
+                    syncStatusText = '📅 No full sync yet';
+                }
+                
+                userSyncStatus.innerHTML = `
+                    <span class="username-display">👤 ${userInfo.username}</span>
+                    <span class="sync-date">${syncStatusText}</span>
+                `;
+                
+                userInfoContainer.classList.remove('hidden');
+            } else if (userInfo && !userInfo.exists) {
+                userSyncStatus.innerHTML = `
+                    <span class="username-display">👤 ${username}</span>
+                    <span class="sync-date">📅 New user - ready for first sync</span>
+                `;
+                userInfoContainer.classList.remove('hidden');
+            } else {
+                userInfoContainer.classList.add('hidden');
+            }
+        } catch (error) {
+            console.error('Error fetching user info:', error);
+            document.getElementById('userInfo').classList.add('hidden');
+        }
     }
 
     applyFilters() {
@@ -1403,7 +1772,7 @@ class BoardGamePicker {
         document.getElementById('gamePlayers').textContent = 
             game.minPlayers === game.maxPlayers ? game.minPlayers : `${game.minPlayers}-${game.maxPlayers}`;
         document.getElementById('gamePlayTime').textContent = `${game.playTime} min`;
-        document.getElementById('gameComplexity').textContent = game.complexity.toFixed(1);
+        document.getElementById('gameComplexity').textContent = game.complexity ? game.complexity.toFixed(1) : 'N/A';
         
         // Update ratings
         const personalRatingElement = document.getElementById('gamePersonalRating');
@@ -1536,7 +1905,12 @@ class BoardGamePicker {
                     gameId: game.id,
                     gameName: game.name
                 };
-                await this.saveToIndexedDB('playData', playDataEntry);
+                try {
+                    await this.saveToIndexedDB('playData', playDataEntry);
+                } catch (indexedDBError) {
+                    console.error('IndexedDB save error for play data:', indexedDBError);
+                    // Continue anyway - caching failure shouldn't break the display
+                }
             }
             
             document.getElementById('gameLastPlayed').textContent = resultText;
@@ -1550,12 +1924,36 @@ class BoardGamePicker {
     }
     
     async fetchPlayDataForGame(game) {
+        // First try backend API if available
+        if (window.apiClient && window.apiClient.hasBackend) {
+            try {
+                const backendResponse = await window.apiClient.fetchPlayData(this.currentUsername, game.id);
+                if (backendResponse) {
+                    // Backend returns the date string directly
+                    return {
+                        plays: backendResponse ? [{ getAttribute: () => backendResponse }] : [],
+                        xmlDoc: null,
+                        fromBackend: true
+                    };
+                }
+            } catch (error) {
+                console.log('⚠️ Backend play data failed, falling back to direct BGG API:', error.message);
+            }
+        }
+        
         const playsUrl = `${this.BGG_API_BASE}/plays?username=${encodeURIComponent(this.currentUsername)}&id=${game.id}&page=1`;
         console.log(`🎯 Fetching play history for ${game.name}:`, playsUrl);
         
         const response = await this.makeApiRequest(playsUrl);
         const parser = new DOMParser();
         const xmlDoc = parser.parseFromString(response, 'text/xml');
+        
+        // Check for parser errors
+        const parserError = xmlDoc.querySelector('parsererror');
+        if (parserError) {
+            console.error('❌ XML parsing error:', parserError.textContent);
+            throw new Error('XML parsing failed: ' + parserError.textContent);
+        }
         
         return {
             plays: xmlDoc.querySelectorAll('play'),
@@ -1886,7 +2284,14 @@ class BoardGamePicker {
             const transaction = this.db.transaction([storeName], 'readwrite');
             const store = transaction.objectStore(storeName);
             
-            const request = store.put(data, storeName === 'collection' ? 'main' : data.id || data.cacheKey);
+            let request;
+            if (storeName === 'collection') {
+                // Collection store uses manual key
+                request = store.put(data, 'main');
+            } else {
+                // Other stores use keyPath (no explicit key needed)
+                request = store.put(data);
+            }
             
             request.onsuccess = () => resolve();
             request.onerror = () => reject(request.error);
@@ -2509,6 +2914,233 @@ class BoardGamePicker {
                 setTimeout(() => this.displaySelectedGame(game), 1000);
             }
         }
+    }
+
+    // Collection Table Methods
+    async toggleCollectionTable() {
+        const container = document.getElementById('collectionTableContainer');
+        const button = document.getElementById('toggleTable');
+        const isHidden = container.classList.contains('hidden');
+
+        if (isHidden) {
+            // Show loading state
+            button.innerHTML = '<span class="table-icon">⏳</span><span class="btn-text">Loading Table...</span>';
+            button.disabled = true;
+            
+            await this.populateCollectionTable();
+            
+            container.classList.remove('hidden');
+            button.innerHTML = '<span class="table-icon">📋</span><span class="btn-text">Hide Collection Table</span>';
+            button.disabled = false;
+        } else {
+            container.classList.add('hidden');
+            button.innerHTML = '<span class="table-icon">📋</span><span class="btn-text">Show Collection Table</span>';
+        }
+    }
+
+    async populateCollectionTable() {
+        const tbody = document.getElementById('collectionTableBody');
+        const stats = document.getElementById('tableStats');
+        
+        // Clear existing content
+        tbody.innerHTML = '';
+        
+        // Get filtered games based on current filters
+        const filteredGames = this.filteredGames;
+        
+        // Update stats
+        stats.textContent = `Showing ${filteredGames.length} of ${this.games.length} games`;
+        
+        // Populate table rows
+        for (const game of filteredGames) {
+            const row = document.createElement('tr');
+            const lastPlayedText = await this.formatLastPlayed(game);
+            
+            row.innerHTML = `
+                <td class="game-title">
+                    <strong>${game.name}</strong>
+                </td>
+                <td class="game-year">${game.yearPublished || 'N/A'}</td>
+                <td class="game-players">${this.formatPlayers(game)}</td>
+                <td class="game-playtime">${this.formatPlayTime(game)}</td>
+                <td class="game-user-rating">${this.formatUserRating(game)}</td>
+                <td class="game-bgg-rating">${this.formatBggRating(game)}</td>
+                <td class="game-plays">${game.numPlays || 0}</td>
+                <td class="game-last-played">${lastPlayedText}</td>
+            `;
+            tbody.appendChild(row);
+        }
+
+        // Initialize sorting
+        this.initializeTableSorting();
+    }
+
+    formatPlayers(game) {
+        if (game.minPlayers === game.maxPlayers) {
+            return game.minPlayers || 'N/A';
+        }
+        return `${game.minPlayers || '?'}-${game.maxPlayers || '?'}`;
+    }
+
+    formatPlayTime(game) {
+        if (game.playTime) {
+            return `${game.playTime} min`;
+        } else if (game.minPlayTime && game.maxPlayTime) {
+            return `${game.minPlayTime}-${game.maxPlayTime} min`;
+        }
+        return 'N/A';
+    }
+
+    formatUserRating(game) {
+        if (game.userRating && game.userRating > 0) {
+            return `⭐ ${game.userRating.toFixed(1)}`;
+        }
+        return 'Unrated';
+    }
+
+    formatBggRating(game) {
+        if (game.rating && game.rating > 0) {
+            return game.rating.toFixed(1);
+        }
+        return 'N/A';
+    }
+
+    async formatLastPlayed(game) {
+        if (game.lastPlayDate) {
+            return this.formatDateForDisplay(game.lastPlayDate);
+        } else if (game.numPlays === 0) {
+            return 'Never played';
+        }
+
+        // Check cached play data
+        const cacheKey = `${this.currentUsername}-${game.id}`;
+        
+        // Check IndexedDB cache first
+        if (this.db) {
+            try {
+                const cachedPlayData = await this.getFromIndexedDB('playData', cacheKey);
+                if (cachedPlayData && this.isPlayDataCacheValid(cachedPlayData)) {
+                    if (cachedPlayData.lastPlayDate) {
+                        game.lastPlayDate = new Date(cachedPlayData.lastPlayDate);
+                        return this.formatDateForDisplay(game.lastPlayDate);
+                    }
+                    return cachedPlayData.displayText;
+                }
+            } catch (error) {
+                console.error('Error reading play data from IndexedDB:', error);
+            }
+        }
+        
+        // Check in-memory cache
+        if (this.playDataCache.has(cacheKey)) {
+            return this.playDataCache.get(cacheKey);
+        }
+
+        return 'Unknown';
+    }
+
+    initializeTableSorting() {
+        const table = document.getElementById('collectionTable');
+        const headers = table.querySelectorAll('th.sortable');
+        
+        headers.forEach(header => {
+            header.addEventListener('click', () => {
+                const column = header.dataset.column;
+                this.sortTable(column, header);
+            });
+        });
+    }
+
+    sortTable(column, headerElement) {
+        const table = document.getElementById('collectionTable');
+        const tbody = table.querySelector('tbody');
+        const rows = Array.from(tbody.querySelectorAll('tr'));
+        
+        // Determine sort direction
+        const isAscending = !headerElement.classList.contains('sort-asc');
+        
+        // Clear all sort indicators
+        table.querySelectorAll('th.sortable').forEach(th => {
+            th.classList.remove('sort-asc', 'sort-desc');
+            th.querySelector('.sort-indicator').textContent = '';
+        });
+        
+        // Set sort indicator for current column
+        headerElement.classList.add(isAscending ? 'sort-asc' : 'sort-desc');
+        headerElement.querySelector('.sort-indicator').textContent = isAscending ? '↑' : '↓';
+        
+        // Sort rows
+        rows.sort((a, b) => {
+            let aValue = this.getCellValue(a, column);
+            let bValue = this.getCellValue(b, column);
+            
+            // Handle different data types
+            if (column === 'yearPublished' || column === 'numPlays') {
+                aValue = parseInt(aValue) || 0;
+                bValue = parseInt(bValue) || 0;
+            } else if (column === 'userRating' || column === 'rating') {
+                aValue = parseFloat(aValue.replace(/[^\d.]/g, '')) || 0;
+                bValue = parseFloat(bValue.replace(/[^\d.]/g, '')) || 0;
+            } else if (column === 'playTime') {
+                aValue = parseInt(aValue.replace(/[^\d]/g, '')) || 0;
+                bValue = parseInt(bValue.replace(/[^\d]/g, '')) || 0;
+            } else if (column === 'lastPlayed') {
+                aValue = this.parseDateForSorting(aValue);
+                bValue = this.parseDateForSorting(bValue);
+            }
+            
+            if (aValue < bValue) return isAscending ? -1 : 1;
+            if (aValue > bValue) return isAscending ? 1 : -1;
+            return 0;
+        });
+        
+        // Re-append sorted rows
+        rows.forEach(row => tbody.appendChild(row));
+    }
+
+    getCellValue(row, column) {
+        const columnMap = {
+            name: 0,
+            yearPublished: 1,
+            players: 2,
+            playTime: 3,
+            userRating: 4,
+            rating: 5,
+            numPlays: 6,
+            lastPlayed: 7
+        };
+        
+        const cellIndex = columnMap[column];
+        return row.cells[cellIndex].textContent.trim();
+    }
+
+    parseDateForSorting(dateText) {
+        if (dateText === 'Never played' || dateText === 'Unknown' || dateText === 'N/A') {
+            return new Date(0); // Very old date for sorting
+        }
+        
+        // Try to parse relative dates like "2 weeks ago", "1 month ago"
+        const now = new Date();
+        
+        if (dateText === 'Yesterday') {
+            return new Date(now - 24 * 60 * 60 * 1000);
+        }
+        
+        const match = dateText.match(/(\d+)\s+(day|week|month|year)s?\s+ago/);
+        if (match) {
+            const amount = parseInt(match[1]);
+            const unit = match[2];
+            const multipliers = {
+                day: 24 * 60 * 60 * 1000,
+                week: 7 * 24 * 60 * 60 * 1000,
+                month: 30 * 24 * 60 * 60 * 1000,
+                year: 365 * 24 * 60 * 60 * 1000
+            };
+            return new Date(now - amount * multipliers[unit]);
+        }
+        
+        // Fallback to parsing as regular date
+        return new Date(dateText);
     }
 }
 

@@ -12,9 +12,17 @@ const initialize = () => {
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 username TEXT UNIQUE NOT NULL,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                last_accessed DATETIME DEFAULT CURRENT_TIMESTAMP
+                last_accessed DATETIME DEFAULT CURRENT_TIMESTAMP,
+                last_full_sync DATETIME
             )`, (err) => {
                 if (err) reject(err);
+            });
+
+            // Add last_full_sync column if it doesn't exist (migration)
+            db.run(`ALTER TABLE users ADD COLUMN last_full_sync DATETIME`, (err) => {
+                if (err && !err.message.includes('duplicate column name')) {
+                    console.warn('Migration warning:', err.message);
+                }
             });
 
             // Collections table
@@ -84,6 +92,15 @@ const createUser = (username) => {
 const updateUserAccess = (userId) => {
     return new Promise((resolve, reject) => {
         db.run('UPDATE users SET last_accessed = CURRENT_TIMESTAMP WHERE id = ?', [userId], (err) => {
+            if (err) reject(err);
+            else resolve();
+        });
+    });
+};
+
+const updateUserFullSync = (userId) => {
+    return new Promise((resolve, reject) => {
+        db.run('UPDATE users SET last_full_sync = CURRENT_TIMESTAMP WHERE id = ?', [userId], (err) => {
             if (err) reject(err);
             else resolve();
         });
@@ -174,6 +191,7 @@ module.exports = {
     getUser,
     createUser,
     updateUserAccess,
+    updateUserFullSync,
     getCollection,
     saveCollection,
     getGameCache,

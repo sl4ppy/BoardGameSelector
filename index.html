@@ -40,8 +40,16 @@
                             placeholder="Enter your BGG username"
                             autocomplete="off"
                         >
-                        <button id="fetchCollection" class="fetch-btn">
+                        <button id="fetchCollection" class="fetch-btn" disabled>
                             <span class="btn-text">Sync Collection</span>
+                            <div class="spinner hidden"></div>
+                        </button>
+                        <button id="syncPlays" class="sync-plays-btn" style="display: none;" disabled>
+                            <span class="btn-text">Sync Plays</span>
+                            <div class="spinner hidden"></div>
+                        </button>
+                        <button id="fullSync" class="full-sync-btn" style="display: none;" disabled>
+                            <span class="btn-text">Full Sync</span>
                             <div class="spinner hidden"></div>
                         </button>
                         <button class="settings-btn" onclick="window.boardGamePickerInstance?.showAdvancedSettings()" title="Advanced Settings">
@@ -49,6 +57,11 @@
                         </button>
                     </div>
                 </div>
+
+                <div class="user-info hidden" id="userInfo">
+                    <div class="user-sync-status" id="userSyncStatus"></div>
+                </div>
+
                 <div class="collection-status" id="collectionStatus"></div>
             </section>
 
@@ -164,6 +177,12 @@
                             <span class="dice-icon">🎲</span>
                             <span class="btn-text">Roll the Dice!</span>
                         </button>
+                        
+                        <button id="toggleTable" class="toggle-table-btn" style="display: none;">
+                            <span class="table-icon">📋</span>
+                            <span class="btn-text">Show Collection Table</span>
+                        </button>
+                        
                         <div class="filtered-count" id="filteredCount"></div>
                         <div class="weight-info" id="weightInfo"></div>
                     </div>
@@ -219,6 +238,57 @@
                                 <button id="rollAgain" class="roll-again-btn">Roll Again</button>
                             </div>
                         </div>
+                    </div>
+                </div>
+
+                <!-- Collection Table -->
+                <div class="collection-table-container hidden" id="collectionTableContainer">
+                    <div class="table-header">
+                        <h3>📋 Complete Collection</h3>
+                        <div class="table-stats" id="tableStats"></div>
+                    </div>
+                    <div class="table-wrapper">
+                        <table class="collection-table" id="collectionTable">
+                            <thead>
+                                <tr>
+                                    <th class="sortable" data-column="name">
+                                        <span class="sort-header">Title</span>
+                                        <span class="sort-indicator"></span>
+                                    </th>
+                                    <th class="sortable" data-column="yearPublished">
+                                        <span class="sort-header">Year</span>
+                                        <span class="sort-indicator"></span>
+                                    </th>
+                                    <th class="sortable" data-column="players">
+                                        <span class="sort-header">Players</span>
+                                        <span class="sort-indicator"></span>
+                                    </th>
+                                    <th class="sortable" data-column="playTime">
+                                        <span class="sort-header">Play Time</span>
+                                        <span class="sort-indicator"></span>
+                                    </th>
+                                    <th class="sortable" data-column="userRating">
+                                        <span class="sort-header">My Rating</span>
+                                        <span class="sort-indicator"></span>
+                                    </th>
+                                    <th class="sortable" data-column="rating">
+                                        <span class="sort-header">BGG Rating</span>
+                                        <span class="sort-indicator"></span>
+                                    </th>
+                                    <th class="sortable" data-column="numPlays">
+                                        <span class="sort-header">Plays</span>
+                                        <span class="sort-indicator"></span>
+                                    </th>
+                                    <th class="sortable" data-column="lastPlayed">
+                                        <span class="sort-header">Last Played</span>
+                                        <span class="sort-indicator"></span>
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody id="collectionTableBody">
+                                <!-- Game rows will be inserted here -->
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </section>

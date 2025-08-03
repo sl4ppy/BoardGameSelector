@@ -114,6 +114,77 @@ class ApiClient {
             return null;
         }
     }
+    
+    async syncPlaysData(username) {
+        if (!this.hasBackend) {
+            return null;
+        }
+        
+        try {
+            const response = await fetch(`${this.baseUrl}/api/collection/${encodeURIComponent(username)}/sync-plays`, {
+                method: 'POST'
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            const data = await response.json();
+            return data;
+        } catch (error) {
+            console.error('Sync plays API error:', error);
+            return null;
+        }
+    }
+    
+    async fullSyncData(username) {
+        if (!this.hasBackend) {
+            return null;
+        }
+        
+        try {
+            const response = await fetch(`${this.baseUrl}/api/collection/${encodeURIComponent(username)}/full-sync`, {
+                method: 'POST'
+            });
+            
+            if (response.status === 202) {
+                const data = await response.json();
+                if (data.code === 'BGG_PROCESSING') {
+                    throw new Error('BGG is processing your collection. Please wait 30-60 seconds and try again.');
+                }
+            }
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            const data = await response.json();
+            return data;
+        } catch (error) {
+            console.error('Full sync API error:', error);
+            return null;
+        }
+    }
+    
+    async getUserInfo(username) {
+        if (!this.hasBackend) {
+            return null;
+        }
+        
+        try {
+            const response = await fetch(`${this.baseUrl}/api/collection/${encodeURIComponent(username)}/info`);
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            const data = await response.json();
+            return data;
+        } catch (error) {
+            console.error('User info API error:', error);
+            return null;
+        }
+    }
 }
 
 // Export as global variable for the main script
