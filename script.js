@@ -3380,9 +3380,33 @@ class BoardGamePicker {
                 click: 'center'
             });
             
-            // Retrieve instance
-            this.flipsterInstance = $(this.flipsterElement).data('flipster');
-            console.log('🎭 Flipster initialized with looping, instance exists:', !!this.flipsterInstance);
+            // Wait for Flipster to fully initialize before retrieving instance
+            setTimeout(() => {
+                // Try multiple ways to get the Flipster instance
+                this.flipsterInstance = $(this.flipsterElement).data('flipster');
+                
+                if (!this.flipsterInstance) {
+                    // Try getting the methods object directly
+                    const methodsData = $(this.flipsterElement).data('methods');
+                    if (methodsData) {
+                        this.flipsterInstance = methodsData;
+                        console.log('🎭 Retrieved Flipster via methods data');
+                    }
+                }
+                
+                if (!this.flipsterInstance) {
+                    // Try accessing the jQuery element itself as the instance
+                    this.flipsterInstance = $(this.flipsterElement);
+                    console.log('🎭 Using jQuery element as Flipster instance');
+                }
+                
+                console.log('🎭 Flipster initialized with looping, instance exists:', !!this.flipsterInstance);
+                console.log('🎭 Instance type:', typeof this.flipsterInstance);
+                
+                if (this.flipsterInstance) {
+                    console.log('🎭 Flipster methods available:', Object.keys(this.flipsterInstance));
+                }
+            }, 100);
             
         } catch (error) {
             console.error('🎭 Flipster initialization error:', error);
@@ -3400,6 +3424,13 @@ class BoardGamePicker {
             const activeItem = this.flipsterElement.querySelector('.flipster-active');
             console.log('🎭 Active item found:', !!activeItem);
             console.log('🎭 Flipster fully initialized:', !!this.flipsterInstance);
+            
+            // Double-check instance retrieval if it's still null
+            if (!this.flipsterInstance) {
+                console.log('🎭 Attempting late instance retrieval...');
+                this.flipsterInstance = $(this.flipsterElement).data('flipster');
+                console.log('🎭 Late retrieval result:', !!this.flipsterInstance);
+            }
         }, 150);
     }
 
@@ -3432,7 +3463,64 @@ class BoardGamePicker {
     }
 
     startCarouselSpin() {
-        if (this.isSpinning || !this.flipsterInstance) return;
+        if (this.isSpinning) {
+            console.log('🎭 Already spinning, ignoring request');
+            return;
+        }
+        
+        console.log('🎭 Starting carousel spin sequence');
+        console.log('🎭 Current flipsterInstance:', this.flipsterInstance);
+        console.log('🎭 jQuery element:', $(this.flipsterElement));
+        console.log('🎭 jQuery data:', $(this.flipsterElement).data());
+        
+        // Check if Flipster is available, if not try to get it
+        if (!this.flipsterInstance) {
+            this.flipsterInstance = $(this.flipsterElement).data('flipster');
+            
+            if (!this.flipsterInstance) {
+                // Try getting the methods object directly
+                const methodsData = $(this.flipsterElement).data('methods');
+                if (methodsData) {
+                    this.flipsterInstance = methodsData;
+                }
+            }
+            
+            if (!this.flipsterInstance) {
+                // Use the jQuery element directly for method calls
+                this.flipsterInstance = $(this.flipsterElement);
+            }
+            
+            console.log('🎭 Attempting to retrieve Flipster instance:', !!this.flipsterInstance);
+            console.log('🎭 Raw Flipster data:', $(this.flipsterElement).data('flipster'));
+        }
+        
+        // At this point we should always have a jQuery element to work with
+        if (!$(this.flipsterElement).hasClass('flipster')) {
+            console.error('🎭 Flipster not properly initialized - missing flipster class');
+            console.log('🎭 Available jQuery data keys:', Object.keys($(this.flipsterElement).data()));
+            console.log('🎭 Element classes:', this.flipsterElement.className);
+            console.log('🎭 Element children count:', this.flipsterElement.children.length);
+            
+            // Try one more time with a short delay in case of timing issues
+            console.log('🎭 Retrying instance retrieval after delay...');
+            setTimeout(() => {
+                this.flipsterInstance = $(this.flipsterElement);
+                console.log('🎭 Delayed retrieval - using jQuery element directly');
+                
+                if ($(this.flipsterElement).hasClass('flipster')) {
+                    console.log('🎭 Flipster found on retry, starting spin...');
+                    this.animateCoverFlowSpin();
+                } else {
+                    console.error('🎭 Still no Flipster instance after retry. Please try again.');
+                    this.isSpinning = false;
+                }
+            }, 200);
+            
+            return;
+        }
+        
+        // Flipster is properly initialized, proceed with spin
+        console.log('🎭 ✅ Flipster ready - proceeding with spin animation');
         
         console.log('🎭 Starting Cover Flow spin');
         this.isSpinning = true;
@@ -3554,6 +3642,27 @@ window.debugBGP = {
         if (app) {
             console.log('🎧 Manual Cover Flow test triggered');
             app.createTestCoverFlow();
+        }
+    },
+    testSpin: () => {
+        const app = window.boardGamePickerInstance;
+        if (app) {
+            console.log('🎧 Manual spin test triggered');
+            app.startCarouselSpin();
+        }
+    },
+    debugFlipster: () => {
+        const app = window.boardGamePickerInstance;
+        if (app) {
+            console.log('🎧 Flipster state debug:');
+            console.log('  - flipsterInstance:', !!app.flipsterInstance);
+            console.log('  - flipsterElement:', !!app.flipsterElement);
+            console.log('  - jQuery data:', $(app.flipsterElement).data());
+            console.log('  - Element classes:', app.flipsterElement?.className);
+            
+            // Try to get instance manually
+            const manualInstance = $(app.flipsterElement).data('flipster');
+            console.log('  - Manual instance retrieval:', !!manualInstance);
         }
     },
     testBasicFlipster: () => {
