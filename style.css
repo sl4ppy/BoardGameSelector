@@ -1017,192 +1017,88 @@ body {
     font-weight: 500;
 }
 
-/* Game Carousel Spinner */
-.game-carousel-container {
+/* Cover Flow Carousel */
+.coverflow-carousel-container {
     margin-top: var(--space-6);
     margin-bottom: var(--space-8);
     padding: var(--space-6);
     background: var(--bg-secondary);
     border-radius: var(--radius-xl);
     border: 1px solid var(--gray-200);
-    overflow: hidden;
+    overflow: visible; /* Allow 3D transforms to show */
 }
 
-.carousel-viewport {
-    position: relative;
-    height: 160px;
-    overflow: hidden;
-    border-radius: var(--radius-lg);
-    background: var(--bg-tertiary);
-    border: 2px solid var(--gray-200);
-}
-
-.carousel-track {
-    display: flex;
-    align-items: center;
-    height: 100%;
-    transition: transform 0ms ease-out;
-    will-change: transform;
-    gap: var(--space-3);
-    padding: var(--space-3);
-}
-
-/* Swiper overrides for our dark theme */
-.swiper {
+/* Custom Flipster Overrides for Dark Theme */
+.flipster {
+    background: transparent !important;
+    height: 300px; /* Set a good height for cover flow */
     width: 100%;
-    height: 100%;
-    overflow: visible;
+    position: relative;
 }
 
-.swiper-wrapper {
-    display: flex;
-    align-items: center;
-    height: 100%;
-    transition: transform 0ms ease-out;
-    will-change: transform;
-    gap: var(--space-3);
-    padding: var(--space-3);
-    /* No transform - positioning handled by JavaScript */
+.flipster .flipster-nav {
+    display: none; /* Hide default navigation */
 }
 
-.swiper-slide {
-    width: auto !important;
-    flex: 0 0 auto;
-    flex-shrink: 0;
-    margin-right: 0; /* Use gap instead */
+/* Important: Let Flipster handle all positioning and layout */
+.flipster ul {
+    list-style: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
 }
 
-.carousel-game {
-    flex: 0 0 auto;
-    width: 120px;
-    height: 120px;
-    border-radius: var(--radius-md);
-    overflow: hidden;
-    border: 2px solid transparent;
-    transition: border-color var(--transition-fast);
+.flipster li {
     cursor: pointer;
-    position: relative;
-    background: var(--bg-primary);
 }
 
-.carousel-game.selected {
-    border-color: var(--primary);
-    box-shadow: 0 0 0 2px rgba(0, 224, 84, 0.3);
-    transform: scale(1.1);
-    z-index: 10;
+/* Debug: Ensure Flipster CSS is working */
+.flipster--coverflow {
+    /* This class should be added by Flipster - if it's not, CSS isn't loading */
 }
 
-.carousel-game-image {
-    width: 100%;
-    height: 100%;
+/* Game thumbnail styling - minimal overrides */
+.flipster li img,
+.flipster li .game-cover {
+    width: 160px;
+    height: 220px;
     object-fit: cover;
+    border-radius: var(--radius-md);
+    border: 2px solid var(--gray-300);
+    background: var(--bg-tertiary);
     display: block;
-    transition: opacity var(--transition-fast);
 }
 
-.carousel-game-image:not([src]), 
-.carousel-game-image[src=""] {
-    opacity: 0;
+/* Center/Active item styling */
+.flipster .flipster-active img,
+.flipster .flipster-active .game-cover {
+    border-color: var(--accent-primary);
+    box-shadow: 0 8px 24px rgba(99, 102, 241, 0.4);
 }
 
-.carousel-game-placeholder {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
+/* Side items styling */
+.flipster li:not(.flipster-active) img,
+.flipster li:not(.flipster-active) .game-cover {
+    opacity: 0.8;
+}
+
+/* Game placeholder for missing images */
+.game-cover {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: var(--bg-secondary);
-    color: var(--text-secondary);
-    font-size: var(--font-size-xs);
-    font-weight: 600;
+    font-size: 3rem;
+    color: var(--gray-400);
     text-align: center;
-    padding: var(--space-1);
-    line-height: 1.2;
+    user-select: none;
 }
 
-.carousel-fade-left,
-.carousel-fade-right {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    width: 40px;
-    pointer-events: none;
-    z-index: 5;
-}
-
-.carousel-fade-left {
-    left: 0;
-    background: linear-gradient(to right, var(--bg-tertiary), transparent);
-}
-
-.carousel-fade-right {
-    right: 0;
-    background: linear-gradient(to left, var(--bg-tertiary), transparent);
-}
-
-.carousel-center-arrow {
-    position: absolute;
-    top: -15px;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 10;
+/* Smooth transitions for spinning effect */
+.flipster.spinning {
     pointer-events: none;
 }
 
-.arrow-indicator {
-    font-size: 24px;
-    color: var(--primary);
-    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-    filter: drop-shadow(0 0 3px rgba(0, 224, 84, 0.6));
-    animation: arrow-pulse 2s ease-in-out infinite;
-}
-
-@keyframes arrow-pulse {
-    0%, 100% {
-        transform: scale(1);
-        opacity: 0.8;
-    }
-    50% {
-        transform: scale(1.1);
-        opacity: 1;
-    }
-}
-
-.arrow-indicator.hit {
-    animation: arrow-hit 0.6s ease-out;
-}
-
-@keyframes arrow-hit {
-    0% {
-        transform: scale(1);
-        color: var(--primary);
-    }
-    50% {
-        transform: scale(1.4);
-        color: #ff6b35;
-        filter: drop-shadow(0 0 8px rgba(255, 107, 53, 0.8));
-    }
-    100% {
-        transform: scale(1);
-        color: var(--primary);
-    }
-}
-
-/* Spinning Animation Classes */
-.carousel-track.spinning {
-    animation: carousel-spin linear infinite;
-}
-
-@keyframes carousel-spin {
-    from {
-        transform: translateX(0);
-    }
-    to {
-        transform: translateX(-100px);
-    }
+.flipster.spinning li {
+    transition: all 0.1s linear !important;
 }
 
 /* Game Display */
