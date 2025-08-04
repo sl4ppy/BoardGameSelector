@@ -3563,63 +3563,27 @@ class BoardGamePicker {
         this.carouselSelectedGame = targetGame;
         console.log(`🎭 Will spin to ${targetGame.name} at index ${targetIndex}`);
         
-        // Get current position or start from random position
-        let currentIndex = Math.floor(Math.random() * totalItems);
-        
-        // Calculate minimum spins before we can land on target
-        const minSpinsBeforeTarget = 20; // Minimum items to spin through for excitement
-        
-        // Calculate total distance to travel (ensuring we go around at least once)
-        let distanceToTarget;
-        if (currentIndex < targetIndex) {
-            // Target is ahead of us - we need to go to targetIndex (inclusive)
-            distanceToTarget = (targetIndex - currentIndex) + 1;
-        } else if (currentIndex > targetIndex) {
-            // Target is behind us, go around the loop - we need to reach targetIndex (inclusive)
-            distanceToTarget = (totalItems - currentIndex) + targetIndex + 1;
-        } else {
-            // We're already at the target, need to go around at least once
-            distanceToTarget = totalItems + 1;
+        // Get current position (try to find the current active item)
+        let currentIndex = 0;
+        const currentActive = this.flipsterElement.querySelector('.flipster__item--current');
+        if (currentActive) {
+            items.forEach((item, index) => {
+                if (item === currentActive || item.contains(currentActive)) {
+                    currentIndex = index;
+                }
+            });
         }
         
-        // Add extra full loops if we haven't spun enough
-        const totalDistance = distanceToTarget + (minSpinsBeforeTarget > distanceToTarget ? 
-            Math.ceil((minSpinsBeforeTarget - distanceToTarget) / totalItems) * totalItems : 0);
-        
-        let currentSpinCount = 0;
-        let isSlowingDown = false;
-        
         console.log(`🎭 Starting from index ${currentIndex}, target at ${targetIndex}`);
-        console.log(`🎭 Distance to target: ${distanceToTarget}, total distance: ${totalDistance}`);
         
+        // Simple incremental approach - just step through each game
         const spinStep = () => {
-            // Check if we should start slowing down (last 8-12 items)
-            const remainingSteps = totalDistance - currentSpinCount;
-            const slowDownZone = 8 + Math.random() * 4; // 8-12 items
-            
-            if (remainingSteps <= slowDownZone && !isSlowingDown) {
-                isSlowingDown = true;
-                console.log(`🎭 Starting to slow down, ${remainingSteps} steps remaining`);
-            }
-            
-            // Jump to current item in sequence
-            console.log(`🎭 Jumping to index ${currentIndex} (step ${currentSpinCount + 1}/${totalDistance})`);
+            // Jump to current position
             $(this.flipsterElement).flipster('jump', currentIndex);
             
-            // Move to next position
-            currentIndex = (currentIndex + 1) % totalItems;
-            currentSpinCount++;
-            
-            // Check if we've reached the target (after the jump and increment)
-            if (currentSpinCount >= totalDistance) {
-                const finalPosition = (currentIndex - 1 + totalItems) % totalItems;
-                console.log(`🎯 Spinning complete! Final position: ${finalPosition}, target was: ${targetIndex}`);
-                console.log(`🎯 Landed on game: ${targetGame.name}`);
-                
-                // Verify we're actually on the right game
-                const actualGameId = items[finalPosition]?.dataset.gameId;
-                const actualGame = this.carouselGames.find(g => g.id == actualGameId);
-                console.log(`🎯 Actual game at final position: ${actualGame?.name} (ID: ${actualGameId})`);
+            // Check if we've reached the target
+            if (currentIndex === targetIndex) {
+                console.log(`🎯 Spinning complete! Landed on: ${targetGame.name}`);
                 
                 setTimeout(() => {
                     this.flipsterElement.classList.remove('spinning');
@@ -3629,19 +3593,11 @@ class BoardGamePicker {
                 return;
             }
             
-            // Calculate delay based on phase
-            let delay;
+            // Move to next position (always go forward, wrapping around if needed)
+            currentIndex = (currentIndex + 1) % totalItems;
             
-            if (!isSlowingDown) {
-                // Fast spinning phase - much faster!
-                delay = 20 + Math.random() * 15; // 20-35ms for variety
-            } else {
-                // Slowing down phase - gradually increase delay
-                const slowProgress = (slowDownZone - (totalDistance - currentSpinCount)) / slowDownZone;
-                delay = 35 + (slowProgress * 150); // 35ms to 185ms
-            }
-            
-            setTimeout(spinStep, delay);
+            // Very fast constant speed
+            setTimeout(spinStep, 30); // 30ms per game for rapid clicking effect
         };
         
         // Start the spinning animation
