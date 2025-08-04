@@ -3297,13 +3297,13 @@ class BoardGamePicker {
         // Clear existing items
         flipsterUl.innerHTML = '';
 
-        // Create test games with real BGG thumbnails
+        // Create test games with placeholder colors (no CORS issues)
         const testGames = [
-            { id: '1', name: 'Gloomhaven', image: 'https://cf.geekdo-images.com/sVYndWWOjH-pFSyg4P4UFA__itemrep/img/8fZqE0J5nD0gXIhPsT-0-V7dw0A=/fit-in/246x300/filters:strip_icc()/pic2437871.jpg' },
-            { id: '2', name: 'Wingspan', image: 'https://cf.geekdo-images.com/yLZJCVLlIx4c7eJEWUNJ7w__itemrep/img/Pg0loCEmla4am83P8MNlmpG8yoY=/fit-in/246x300/filters:strip_icc()/pic4458123.jpg' },
-            { id: '3', name: 'Azul', image: 'https://cf.geekdo-images.com/aPSHJO0d0XOpQR5X-wJonw__itemrep/img/vE6HSMhHe-pgWoWnq-QiF6LdCOU=/fit-in/246x300/filters:strip_icc()/pic3718275.jpg' },
-            { id: '4', name: 'Scythe', image: 'https://cf.geekdo-images.com/7k_nOxpO9OGIjhLq2BUZdA__itemrep/img/FX1X8knCn5lwJVIux3Y-iV4pShI=/fit-in/246x300/filters:strip_icc()/pic1534148.jpg' },
-            { id: '5', name: 'Catan', image: 'https://cf.geekdo-images.com/W3Bsga_uLP9kO91gZ7H8yw__itemrep/img/IzYEUm_gWFuRFOL8gQYqGm5gU6A=/fit-in/246x300/filters:strip_icc()/pic2419375.jpg' }
+            { id: '1', name: 'Gloomhaven', color: '#2563eb' },
+            { id: '2', name: 'Wingspan', color: '#dc2626' },
+            { id: '3', name: 'Azul', color: '#059669' },
+            { id: '4', name: 'Scythe', color: '#7c3aed' },
+            { id: '5', name: 'Catan', color: '#ea580c' }
         ];
 
         for (const game of testGames) {
@@ -3311,22 +3311,17 @@ class BoardGamePicker {
             listItem.dataset.gameId = game.id;
             listItem.dataset.gameName = game.name;
             
-            const img = document.createElement('img');
-            img.src = game.image;
-            img.alt = game.name;
-            img.title = game.name;
+            // Create colored placeholder instead of image
+            const placeholder = document.createElement('div');
+            placeholder.className = 'game-cover';
+            placeholder.style.backgroundColor = game.color;
+            placeholder.style.color = 'white';
+            placeholder.style.fontSize = '2rem';
+            placeholder.style.fontWeight = 'bold';
+            placeholder.textContent = game.name.substring(0, 2).toUpperCase();
+            placeholder.title = game.name;
             
-            img.onerror = () => {
-                console.log(`🎧 Test image failed to load: ${game.name}`);
-                img.remove();
-                const placeholder = document.createElement('div');
-                placeholder.className = 'game-cover';
-                placeholder.textContent = '🎮';
-                placeholder.title = game.name;
-                listItem.appendChild(placeholder);
-            };
-            
-            listItem.appendChild(img);
+            listItem.appendChild(placeholder);
             flipsterUl.appendChild(listItem);
         }
 
@@ -3349,6 +3344,11 @@ class BoardGamePicker {
             return;
         }
         
+        if (typeof $.fn.flipster === 'undefined') {
+            console.error('🎭 Flipster plugin not loaded!');
+            return;
+        }
+        
         // Destroy existing instance if it exists
         if (this.flipsterInstance) {
             try {
@@ -3359,44 +3359,61 @@ class BoardGamePicker {
         }
         
         // Initialize Flipster with Cover Flow style
-        $(this.flipsterElement).flipster({
-            style: 'coverflow',
-            spacing: -0.6,
-            click: 'center',
-            keyboard: true,
-            scrollwheel: false,
-            touch: true,
-            nav: false,
-            buttons: false,
-            loop: false,
-            start: 'center',
-            onItemSwitch: (currentItem, previousItem) => {
-                const gameId = $(currentItem).data('game-id');
-                const game = this.carouselGames.find(g => g.id == gameId);
-                if (game) {
-                    this.currentSelectedGame = game;
-                    console.log('🎭 Cover Flow switched to:', game.name);
+        try {
+            const flipsterConfig = {
+                style: 'coverflow',
+                spacing: -0.6,
+                click: 'center',
+                keyboard: true,
+                scrollwheel: false,
+                touch: true,
+                nav: false,
+                buttons: false,
+                loop: false,
+                start: 'center',
+                onItemSwitch: (currentItem, previousItem) => {
+                    const gameId = $(currentItem).data('game-id');
+                    const game = this.carouselGames.find(g => g.id == gameId);
+                    if (game) {
+                        this.currentSelectedGame = game;
+                        console.log('🎭 Cover Flow switched to:', game.name);
+                    }
                 }
-            }
-        });
+            };
+            
+            console.log('🎭 Initializing Flipster with config:', flipsterConfig);
+            const $flipster = $(this.flipsterElement);
+            $flipster.flipster(flipsterConfig);
+            
+            // Give Flipster time to initialize
+            setTimeout(() => {
+                this.flipsterInstance = $flipster.data('flipster');
+                console.log('🎭 Flipster instance after delay:', this.flipsterInstance);
+                
+                // Force center the first item if no active item
+                if (!this.flipsterElement.querySelector('.flipster-active')) {
+                    console.log('🎭 No active item found, forcing center');
+                    $flipster.flipster('jump', 0);
+                }
+            }, 50);
+            
+        } catch (error) {
+            console.error('🎭 Flipster initialization error:', error);
+        }
         
-        this.flipsterInstance = $(this.flipsterElement).data('flipster');
-        console.log('🎭 Flipster initialized successfully');
-        console.log('🎭 Flipster instance:', this.flipsterInstance);
-        
-        // Check if items were created and CSS classes applied
+        // Check if items were created
         const items = this.flipsterElement.querySelectorAll('li');
         console.log(`🎭 Created ${items.length} Cover Flow items`);
         console.log('🎭 Flipster element classes:', this.flipsterElement.className);
-        console.log('🎭 Has coverflow class:', this.flipsterElement.classList.contains('flipster--coverflow'));
         
-        // Check if Flipster added the necessary structure
+        // Final check after full initialization
         setTimeout(() => {
-            console.log('🎭 Post-init check:');
-            console.log('🎭 Flipster classes after init:', this.flipsterElement.className);
+            console.log('🎭 Final initialization check:');
+            console.log('🎭 Flipster classes:', this.flipsterElement.className);
             const activeItem = this.flipsterElement.querySelector('.flipster-active');
             console.log('🎭 Active item found:', !!activeItem);
-        }, 100);
+            console.log('🎭 Flipster fully initialized:', !!this.flipsterInstance);
+        }, 150);
     }
 
     getCenterGame() {
