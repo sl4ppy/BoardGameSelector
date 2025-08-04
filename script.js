@@ -3466,41 +3466,61 @@ class BoardGamePicker {
         });
         
         if (targetIndex === -1) {
-            // If target game not in visible items, just pick a random one
+            // If target game not found, just pick a random one
             targetIndex = Math.floor(Math.random() * totalItems);
             const fallbackGameId = items[targetIndex].dataset.gameId;
             targetGame = this.carouselGames.find(g => g.id == fallbackGameId) || targetGame;
         }
         
         this.carouselSelectedGame = targetGame;
+        console.log(`🎭 Will spin to ${targetGame.name} at index ${targetIndex}`);
         
-        // Spin through several items quickly then land on target
-        let currentIndex = 0;
-        let spinsLeft = 8 + Math.floor(Math.random() * 8); // Random 8-16 spins
-        const spinInterval = 150; // ms between spins
+        // Determine spinning duration and pattern
+        const minSpins = 15; // Minimum items to spin through
+        const maxSpins = 30; // Maximum items to spin through  
+        const totalSpins = minSpins + Math.floor(Math.random() * (maxSpins - minSpins));
+        
+        let currentSpinCount = 0;
+        let currentIndex = Math.floor(Math.random() * totalItems); // Start from random position
         
         const spinStep = () => {
-            if (spinsLeft <= 0) {
-                // Final jump to target
+            if (currentSpinCount >= totalSpins) {
+                // Final jump to exact target
+                console.log(`🎯 Spinning complete, jumping to target: ${targetGame.name}`);
                 $(this.flipsterElement).flipster('jump', targetIndex);
+                
                 setTimeout(() => {
                     this.flipsterElement.classList.remove('spinning');
                     this.isSpinning = false;
                     this.onCarouselComplete();
-                }, 500);
+                }, 600);
                 return;
             }
             
-            // Jump to next item
+            // Jump to next item in sequence
             $(this.flipsterElement).flipster('jump', currentIndex);
             currentIndex = (currentIndex + 1) % totalItems;
-            spinsLeft--;
+            currentSpinCount++;
             
-            // Increase delay as we get closer to target
-            const delay = spinsLeft <= 3 ? spinInterval * (4 - spinsLeft) : spinInterval;
+            // Calculate delay - start fast, slow down at the end
+            const progress = currentSpinCount / totalSpins;
+            let delay;
+            
+            if (progress < 0.7) {
+                // Fast spinning for first 70%
+                delay = 50;
+            } else if (progress < 0.9) {
+                // Medium speed for next 20%
+                delay = 100;
+            } else {
+                // Slow down for final 10%
+                delay = 200 + (progress - 0.9) * 1000; // 200ms to 300ms
+            }
+            
             setTimeout(spinStep, delay);
         };
         
+        // Start the spinning animation
         spinStep();
     }
 
