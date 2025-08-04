@@ -1028,68 +1028,32 @@ body {
     overflow: visible; /* Allow 3D transforms to show */
 }
 
-/* Custom Flipster Overrides for Dark Theme */
+/* Minimal Flipster Overrides - Let Flipster handle everything */
 .flipster {
     background: transparent !important;
-    height: 300px; /* Set a good height for cover flow */
-    width: 100%;
-    position: relative;
+    height: 300px;
 }
 
 .flipster .flipster-nav {
-    display: none; /* Hide default navigation */
+    display: none;
 }
 
-/* Important: Let Flipster handle all positioning and layout */
-.flipster ul {
-    list-style: none !important;
-    margin: 0 !important;
-    padding: 0 !important;
+/* Minimal game styling - let Flipster handle positioning */
+.flipster img,
+.flipster .game-cover {
+    width: 140px;
+    height: 200px;
+    border-radius: 8px;
+    border: 2px solid #666;
 }
 
-.flipster li {
-    cursor: pointer;
-}
-
-/* Debug: Ensure Flipster CSS is working */
-.flipster--coverflow {
-    /* This class should be added by Flipster - if it's not, CSS isn't loading */
-}
-
-/* Game thumbnail styling - minimal overrides */
-.flipster li img,
-.flipster li .game-cover {
-    width: 160px;
-    height: 220px;
-    object-fit: cover;
-    border-radius: var(--radius-md);
-    border: 2px solid var(--gray-300);
-    background: var(--bg-tertiary);
-    display: block;
-}
-
-/* Center/Active item styling */
-.flipster .flipster-active img,
-.flipster .flipster-active .game-cover {
-    border-color: var(--accent-primary);
-    box-shadow: 0 8px 24px rgba(99, 102, 241, 0.4);
-}
-
-/* Side items styling */
-.flipster li:not(.flipster-active) img,
-.flipster li:not(.flipster-active) .game-cover {
-    opacity: 0.8;
-}
-
-/* Game placeholder for missing images */
 .game-cover {
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 3rem;
-    color: var(--gray-400);
     text-align: center;
-    user-select: none;
+    background: #444;
+    color: white;
 }
 
 /* Smooth transitions for spinning effect */

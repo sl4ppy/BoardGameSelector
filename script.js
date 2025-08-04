@@ -3358,44 +3358,16 @@ class BoardGamePicker {
             }
         }
         
-        // Initialize Flipster with Cover Flow style
+        // Try the simplest possible Flipster initialization
         try {
-            const flipsterConfig = {
-                style: 'coverflow',
-                spacing: -0.6,
-                click: 'center',
-                keyboard: true,
-                scrollwheel: false,
-                touch: true,
-                nav: false,
-                buttons: false,
-                loop: false,
-                start: 'center',
-                onItemSwitch: (currentItem, previousItem) => {
-                    const gameId = $(currentItem).data('game-id');
-                    const game = this.carouselGames.find(g => g.id == gameId);
-                    if (game) {
-                        this.currentSelectedGame = game;
-                        console.log('🎭 Cover Flow switched to:', game.name);
-                    }
-                }
-            };
+            console.log('🎭 Attempting basic Flipster initialization...');
             
-            console.log('🎭 Initializing Flipster with config:', flipsterConfig);
-            const $flipster = $(this.flipsterElement);
-            $flipster.flipster(flipsterConfig);
+            // Most basic initialization - no config options
+            $(this.flipsterElement).flipster();
             
-            // Give Flipster time to initialize
-            setTimeout(() => {
-                this.flipsterInstance = $flipster.data('flipster');
-                console.log('🎭 Flipster instance after delay:', this.flipsterInstance);
-                
-                // Force center the first item if no active item
-                if (!this.flipsterElement.querySelector('.flipster-active')) {
-                    console.log('🎭 No active item found, forcing center');
-                    $flipster.flipster('jump', 0);
-                }
-            }, 50);
+            // Retrieve instance
+            this.flipsterInstance = $(this.flipsterElement).data('flipster');
+            console.log('🎭 Basic Flipster initialized, instance exists:', !!this.flipsterInstance);
             
         } catch (error) {
             console.error('🎭 Flipster initialization error:', error);
