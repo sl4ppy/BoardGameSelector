@@ -1632,14 +1632,14 @@ class BoardGamePicker {
         console.log('🎰 rollDice called - checking prerequisites');
         console.log('🎰 Games loaded:', !!this.games && this.games.length > 0);
         console.log('🎰 Filtered games:', !!this.filteredGames && this.filteredGames.length > 0);
-        console.log('🎰 Carousel elements:', !!this.carouselContainer && !!this.swiperWrapper);
+        console.log('🎭 Cover Flow elements:', !!this.carouselContainer && !!this.flipsterElement);
         
         if (!this.games || this.games.length === 0) {
             console.log('🎰 Cannot spin - no games loaded yet');
             return;
         }
         
-        if (!this.filteredGames || this.filteredGames.length === 0 || !this.carouselContainer || !this.swiperWrapper) {
+        if (!this.filteredGames || this.filteredGames.length === 0 || !this.carouselContainer || !this.flipsterElement) {
             console.log('🎰 Cannot spin - missing filtered games or carousel elements');
             this.showCollectionStatus('❌ No games available with current filters', 'error');
             return;
@@ -1648,10 +1648,10 @@ class BoardGamePicker {
         // Ensure carousel is populated before spinning
         console.log('🎰 About to start carousel spin');
         console.log('🎰 Carousel games count:', this.carouselGames?.length);
-        console.log('🎰 DOM slides count:', this.swiperWrapper.children.length);
+        console.log('🎭 Cover Flow items count:', this.flipsterElement.querySelectorAll('li').length);
         
         // Re-populate carousel if needed
-        if (!this.carouselGames || this.carouselGames.length === 0 || this.swiperWrapper.children.length === 0) {
+        if (!this.carouselGames || this.carouselGames.length === 0 || this.flipsterElement.querySelectorAll('li').length === 0) {
             console.log('🎰 Carousel not populated, populating now...');
             this.populateCarousel();
         }
@@ -3172,42 +3172,44 @@ class BoardGamePicker {
         return new Date(dateText);
     }
 
-    // Carousel Methods
+    // Cover Flow Carousel Methods
     initializeCarousel() {
         this.carouselGames = [];
         this.isSpinning = false;
         this.selectedGameIndex = 0;
         
-        // Carousel DOM elements
-        this.carouselContainer = document.getElementById('gameCarouselContainer');
-        this.swiperWrapper = document.getElementById('swiperWrapper');
-        this.gameSwiper = null;
+        // Cover Flow DOM elements
+        this.carouselContainer = document.getElementById('coverflowCarouselContainer');
+        this.flipsterElement = document.getElementById('gameFlipster');
+        this.flipsterInstance = null;
         
-        console.log('🎰 Carousel initialized');
+        console.log('🎭 Cover Flow initialized');
+        console.log('🎭 Container found:', !!this.carouselContainer);
+        console.log('🎭 Flipster element found:', !!this.flipsterElement);
     }
 
     populateCarousel() {
-        console.log('🎰 populateCarousel called with', this.filteredGames?.length, 'games');
+        console.log('🎭 populateCarousel called with', this.filteredGames?.length, 'games');
         
         // Check if we have base games loaded first
         if (!this.games || this.games.length === 0) {
-            console.log('🎰 Cannot populate carousel - no base games loaded');
+            console.log('🎭 Cannot populate carousel - no base games loaded');
             return;
         }
         
-        if (!this.filteredGames || this.filteredGames.length === 0 || !this.carouselContainer || !this.swiperWrapper) {
-            console.log('🎰 Cannot populate carousel - missing filtered games or DOM elements');
+        if (!this.filteredGames || this.filteredGames.length === 0 || !this.carouselContainer || !this.flipsterElement) {
+            console.log('🎭 Cannot populate carousel - missing filtered games or DOM elements');
             return;
         }
 
         // Safety check: ensure games have required properties
         const validGames = this.filteredGames.filter(game => game && game.name && typeof game.name === 'string');
         if (validGames.length === 0) {
-            console.log('🎰 No valid games for carousel');
+            console.log('🎭 No valid games for carousel');
             return;
         }
 
-        // Store all available games for cycling through
+        // Store all available games
         this.carouselGames = [...validGames];
         
         // Shuffle the array for random display order
@@ -3216,274 +3218,234 @@ class BoardGamePicker {
             [this.carouselGames[i], this.carouselGames[j]] = [this.carouselGames[j], this.carouselGames[i]];
         }
 
-        // Clear existing thumbnails
-        this.swiperWrapper.innerHTML = '';
-
-        // Create only the visible slots (8 thumbnails) - like a slot machine
-        this.visibleSlots = 8;
-        this.currentGameOffset = 0; // Which game index we're starting from
-        
-        for (let i = 0; i < this.visibleSlots; i++) {
-            const gameIndex = (this.currentGameOffset + i) % this.carouselGames.length;
-            const game = this.carouselGames[gameIndex];
-            
-            try {
-                const thumbnail = document.createElement('div');
-                thumbnail.className = 'carousel-game';
-                thumbnail.dataset.slotIndex = i;
-                thumbnail.dataset.gameId = game.id;
-
-                const img = document.createElement('img');
-                img.className = 'carousel-game-image';
-                
-                // Set the image source safely
-                if (game.thumbnail && typeof game.thumbnail === 'string') {
-                    try {
-                        img.src = game.thumbnail;
-                    } catch (e) {
-                        console.warn('Invalid thumbnail URL:', game.thumbnail);
-                        img.style.display = 'none';
-                    }
-                } else {
-                    // No thumbnail - just set a CSS background
-                    img.style.display = 'none';
-                    thumbnail.style.backgroundColor = '#3a404c';
-                    thumbnail.style.border = '1px solid #555';
-                }
-                
-                img.alt = game.name || 'Game';
-                img.onerror = () => {
-                    // If image fails to load, create a placeholder
-                    img.style.display = 'none';
-                    const placeholder = document.createElement('div');
-                    placeholder.className = 'carousel-game-placeholder';
-                    placeholder.textContent = '🎮';
-                    thumbnail.appendChild(placeholder);
-                };
-
-                thumbnail.appendChild(img);
-                this.swiperWrapper.appendChild(thumbnail);
-            } catch (error) {
-                console.error('Error creating carousel game thumbnail:', error, game);
-            }
+        // Get the UL element inside flipster
+        const flipsterUl = this.flipsterElement.querySelector('ul');
+        if (!flipsterUl) {
+            console.error('🎭 Flipster UL element not found');
+            return;
         }
 
+        // Clear existing items
+        flipsterUl.innerHTML = '';
+
+        // Create Cover Flow items (limit to reasonable number for performance)
+        const maxItems = Math.min(this.carouselGames.length, 20);
+        
+        for (let i = 0; i < maxItems; i++) {
+            const game = this.carouselGames[i];
+            
+            const listItem = document.createElement('li');
+            listItem.dataset.gameId = game.id;
+            listItem.dataset.gameName = game.name;
+            
+            // Create image or placeholder
+            const imageUrl = game.image || game.thumbnail;
+            console.log(`🎭 Game ${game.name}: image="${game.image}", thumbnail="${game.thumbnail}"`);
+            
+            if (imageUrl && typeof imageUrl === 'string') {
+                const img = document.createElement('img');
+                img.src = imageUrl;
+                img.alt = game.name;
+                img.title = game.name;
+                
+                img.onerror = () => {
+                    // Replace with placeholder on error
+                    img.remove();
+                    const placeholder = document.createElement('div');
+                    placeholder.className = 'game-cover';
+                    placeholder.textContent = '🎮';
+                    placeholder.title = game.name;
+                    listItem.appendChild(placeholder);
+                };
+                
+                listItem.appendChild(img);
+            } else {
+                // No thumbnail - create placeholder
+                const placeholder = document.createElement('div');
+                placeholder.className = 'game-cover';
+                placeholder.textContent = '🎮';
+                placeholder.title = game.name;
+                listItem.appendChild(placeholder);
+            }
+            
+            flipsterUl.appendChild(listItem);
+        }
+
+        // Initialize or update Flipster
+        this.initializeFlipster();
+        
         // Show carousel
-        console.log('🎰 Showing carousel container:', this.carouselContainer);
         this.carouselContainer.classList.remove('hidden');
         
-        // Start at a position that shows games in the viewport
-        const viewportWidth = this.carouselContainer.offsetWidth;
-        const thumbnailWidth = 140;
-        const thumbnailsVisible = Math.floor(viewportWidth / thumbnailWidth);
-        const centerOffset = thumbnailsVisible / 2;
-        
-        this.carouselPosition = centerOffset;
-        this.updateCarouselPosition();
-        
-        console.log(`🎰 Initial carousel position set to ${this.carouselPosition} (${thumbnailsVisible} thumbnails visible)`);
-        
-        console.log(`🎰 Carousel populated with ${this.carouselGames.length} total games showing ${this.visibleSlots} slots`);
+        console.log(`🎭 Cover Flow populated with ${maxItems} games`);
     }
 
-    // New method for slot machine style content cycling
-    updateCarouselContent(offset = 0) {
-        if (!this.swiperWrapper || !this.carouselGames) return;
+    initializeFlipster() {
+        console.log('🎭 initializeFlipster called');
+        console.log('🎭 jQuery available:', typeof $ !== 'undefined');
+        console.log('🎭 Flipster element:', this.flipsterElement);
         
-        const slots = this.swiperWrapper.children;
+        if (typeof $ === 'undefined') {
+            console.error('🎭 jQuery not loaded!');
+            return;
+        }
         
-        // Update each visible slot with a different game
-        for (let i = 0; i < slots.length; i++) {
-            const gameIndex = (offset + i) % this.carouselGames.length;
-            const game = this.carouselGames[gameIndex];
-            const slot = slots[i];
-            
-            if (slot && game) {
-                slot.dataset.gameId = game.id;
-                const img = slot.querySelector('.carousel-game-image');
-                if (img && img.src !== game.thumbnail) {
-                    img.src = game.thumbnail || 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIwIiBoZWlnaHQ9IjEyMCIgdmlld0JveD0iMCAwIDEyMCAxMjAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIxMjAiIGhlaWdodD0iMTIwIiBmaWxsPSIjNGE1NTY4Ii8+Cjx0ZXh0IHg9IjYwIiB5PSI2NSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0id2hpdGUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIzNiI+4p2UpDwvdGV4dD4KPC9zdmc+'; 
-                    img.alt = game.name;
-                    img.title = game.name;
-                }
+        // Destroy existing instance if it exists
+        if (this.flipsterInstance) {
+            try {
+                $(this.flipsterElement).flipster('destroy');
+            } catch (e) {
+                console.warn('🎭 Error destroying previous Flipster instance:', e);
             }
         }
+        
+        // Initialize Flipster with Cover Flow style
+        $(this.flipsterElement).flipster({
+            style: 'coverflow',
+            spacing: -0.6,
+            click: 'center',
+            keyboard: true,
+            scrollwheel: false,
+            touch: true,
+            nav: false,
+            buttons: false,
+            loop: false,
+            start: 'center',
+            onItemSwitch: (currentItem, previousItem) => {
+                const gameId = $(currentItem).data('game-id');
+                const game = this.carouselGames.find(g => g.id == gameId);
+                if (game) {
+                    this.currentSelectedGame = game;
+                    console.log('🎭 Cover Flow switched to:', game.name);
+                }
+            }
+        });
+        
+        this.flipsterInstance = $(this.flipsterElement).data('flipster');
+        console.log('🎭 Flipster initialized successfully');
+        console.log('🎭 Flipster instance:', this.flipsterInstance);
+        
+        // Check if items were created
+        const items = this.flipsterElement.querySelectorAll('li');
+        console.log(`🎭 Created ${items.length} Cover Flow items`);
     }
 
-    updateCarouselPosition() {
-        // Slot machine doesn't need position updates - thumbnails stay in fixed positions
-        // Content changes via updateCarouselContent() instead
-        if (!this.carouselIsSpinning) {
-            console.log(`🎰 Slot machine in idle state`);
+    getCenterGame() {
+        if (!this.flipsterInstance) return null;
+        
+        const activeItem = this.flipsterElement.querySelector('.flipster-active');
+        if (!activeItem) return null;
+        
+        const gameId = activeItem.dataset.gameId;
+        return this.carouselGames.find(g => g.id == gameId);
+    }
+
+    jumpToGame(targetGame) {
+        if (!this.flipsterInstance || !targetGame) return;
+        
+        const items = this.flipsterElement.querySelectorAll('li');
+        let targetIndex = -1;
+        
+        items.forEach((item, index) => {
+            if (item.dataset.gameId == targetGame.id) {
+                targetIndex = index;
+            }
+        });
+        
+        if (targetIndex >= 0) {
+            $(this.flipsterElement).flipster('jump', targetIndex);
+            console.log(`🎭 Jumped to ${targetGame.name} at index ${targetIndex}`);
         }
-    }
-
-    centerSelectedGame() {
-        // In slot machine mode, centering is handled by animateSlotMachine()
-        // This method is kept for compatibility but does minimal work
-        console.log(`🎯 Selected game: ${this.carouselSelectedGame?.name}`);
     }
 
     startCarouselSpin() {
-        if (this.carouselIsSpinning) return;
+        if (this.isSpinning || !this.flipsterInstance) return;
         
-        console.log('🎰 Starting slot machine spin');
-        this.carouselIsSpinning = true;
+        console.log('🎭 Starting Cover Flow spin');
+        this.isSpinning = true;
         
         // Select random target game using weighted selection
         const selectedGame = this.selectWeightedGame();
         console.log('🎯 Selected game:', selectedGame?.name, 'ID:', selectedGame?.id);
         
-        const targetIndex = this.carouselGames.findIndex(game => game.id === selectedGame.id);
-        console.log('🎯 Target index in carousel:', targetIndex);
+        // Add spinning class for visual feedback
+        this.flipsterElement.classList.add('spinning');
+        
+        // Animate through several games before landing on target
+        this.animateCoverFlowSpin(selectedGame);
+    }
+
+    animateCoverFlowSpin(targetGame) {
+        const items = this.flipsterElement.querySelectorAll('li');
+        const totalItems = items.length;
+        
+        if (totalItems === 0) {
+            this.onCarouselComplete();
+            return;
+        }
+        
+        // Find target index
+        let targetIndex = -1;
+        items.forEach((item, index) => {
+            if (item.dataset.gameId == targetGame.id) {
+                targetIndex = index;
+            }
+        });
         
         if (targetIndex === -1) {
-            console.error('Selected game not found in carousel games');
-            console.log('🎯 Available carousel games:', this.carouselGames.map(g => `${g.name} (${g.id})`));
-            this.carouselIsSpinning = false;
-            return;
+            // If target game not in visible items, just pick a random one
+            targetIndex = Math.floor(Math.random() * totalItems);
+            const fallbackGameId = items[targetIndex].dataset.gameId;
+            targetGame = this.carouselGames.find(g => g.id == fallbackGameId) || targetGame;
         }
         
-        // Slot machine animation settings
-        this.spinDuration = 3000; // Fixed 3 seconds for consistent experience
-        this.spinStartTime = Date.now();
-        this.currentContentOffset = 0;
-        this.targetGameIndex = targetIndex;
-        this.carouselSelectedGame = selectedGame;
+        this.carouselSelectedGame = targetGame;
         
-        console.log(`🎯 Starting slot machine animation for ${this.spinDuration}ms`);
+        // Spin through several items quickly then land on target
+        let currentIndex = 0;
+        let spinsLeft = 8 + Math.floor(Math.random() * 8); // Random 8-16 spins
+        const spinInterval = 150; // ms between spins
         
-        // Start slot machine animation
-        this.animateSlotMachine();
-    }
-
-    animateSlotMachine() {
-        if (!this.carouselIsSpinning) return;
-        
-        const currentTime = Date.now();
-        const elapsed = currentTime - this.spinStartTime;
-        const progress = Math.min(elapsed / this.spinDuration, 1); // 0 to 1
-        
-        if (progress >= 1) {
-            // Animation complete - show the selected game
-            this.carouselIsSpinning = false;
-            
-            // Calculate final offset to show selected game in center slot
-            const centerSlot = Math.floor(this.swiperWrapper.children.length / 2);
-            const finalOffset = this.targetGameIndex - centerSlot;
-            this.updateCarouselContent(finalOffset);
-            
-            // Now position the wrapper so the center slot aligns with the arrow
-            const thumbnailWidth = 140; // 120px + 20px gap
-            const viewportCenter = this.carouselContainer.offsetWidth / 2;
-            const centerSlotPosition = (centerSlot * thumbnailWidth) + (thumbnailWidth / 2); // Center of the center slot
-            const alignmentOffset = viewportCenter - centerSlotPosition;
-            
-            this.swiperWrapper.style.transform = `translateX(${alignmentOffset}px)`;
-            
-            console.log(`🎯 Centering: viewport=${viewportCenter}px, centerSlot=${centerSlot}, offset=${alignmentOffset}px`);
-            
-            console.log(`🎯 Slot machine complete - showing ${this.carouselSelectedGame.name} in center`);
-            
-            // Trigger arrow hit animation
-            const arrow = document.querySelector('.arrow-indicator');
-            if (arrow) {
-                arrow.classList.add('hit');
-                setTimeout(() => arrow.classList.remove('hit'), 600);
+        const spinStep = () => {
+            if (spinsLeft <= 0) {
+                // Final jump to target
+                $(this.flipsterElement).flipster('jump', targetIndex);
+                setTimeout(() => {
+                    this.flipsterElement.classList.remove('spinning');
+                    this.isSpinning = false;
+                    this.onCarouselComplete();
+                }, 500);
+                return;
             }
             
-            this.onCarouselComplete();
-            return;
-        }
+            // Jump to next item
+            $(this.flipsterElement).flipster('jump', currentIndex);
+            currentIndex = (currentIndex + 1) % totalItems;
+            spinsLeft--;
+            
+            // Increase delay as we get closer to target
+            const delay = spinsLeft <= 3 ? spinInterval * (4 - spinsLeft) : spinInterval;
+            setTimeout(spinStep, delay);
+        };
         
-        // Calculate spin speed - fast at start, slow at end with easing
-        const easeOutQuart = 1 - Math.pow(1 - progress, 4);
-        const maxSpeed = 20; // games per second at peak
-        const currentSpeed = maxSpeed * (1 - easeOutQuart);
-        
-        // Update content cycling - cycle through games rapidly
-        this.currentContentOffset = Math.floor(elapsed / 50) % this.carouselGames.length; // Change every 50ms
-        this.updateCarouselContent(this.currentContentOffset);
-        
-        // Continue animation
-        this.carouselAnimationFrame = requestAnimationFrame(() => this.animateSlotMachine());
+        spinStep();
     }
 
-    animateCarousel() {
-        if (!this.carouselIsSpinning) return;
-        
-        const currentTime = Date.now();
-        const elapsed = currentTime - this.spinStartTime;
-        const progress = Math.min(elapsed / this.spinDuration, 1); // 0 to 1
-        
-        if (progress >= 1) {
-            // Animation complete - snap to exact target position
-            const finalExactPosition = this.spinStartPosition + this.spinTotalDistance;
-            this.carouselPosition = finalExactPosition;
-            this.carouselIsSpinning = false;
-            
-            console.log(`🎯 Animation complete - final position: ${finalExactPosition.toFixed(2)}, target game index: ${this.targetGameIndex}`);
-            
-            this.centerSelectedGame();
-            this.onCarouselComplete();
-            return;
-        }
-        
-        // Easing function: easeOutBack - overshoots then settles back
-        const c1 = 1.70158;
-        const c3 = c1 + 1;
-        const easedProgress = 1 + c3 * Math.pow(progress - 1, 3) + c1 * Math.pow(progress - 1, 2);
-        
-        // Calculate current position
-        const targetPosition = this.spinStartPosition + this.spinTotalDistance;
-        const rawNewPosition = this.spinStartPosition + (this.spinTotalDistance * easedProgress);
-        
-        // Clamp the overshoot to prevent going too far beyond valid thumbnails
-        const maxOvershoot = 0.5; // Allow half a thumbnail overshoot
-        const minPosition = targetPosition - maxOvershoot;
-        const maxPosition = targetPosition + maxOvershoot;
-        const clampedPosition = Math.max(minPosition, Math.min(maxPosition, rawNewPosition));
-        
-        // Speed limiting: maximum 10 thumbnails per second
-        const deltaTime = elapsed - (this.lastFrameTime || 0);
-        const maxDeltaPosition = (10 * deltaTime) / 1000; // 10 thumbnails per second
-        
-        if (this.lastPosition !== undefined) {
-            const proposedDelta = clampedPosition - this.lastPosition;
-            if (Math.abs(proposedDelta) > maxDeltaPosition) {
-                // Limit the speed
-                const direction = proposedDelta > 0 ? 1 : -1;
-                this.carouselPosition = this.lastPosition + (direction * maxDeltaPosition);
-            } else {
-                this.carouselPosition = clampedPosition;
-            }
-        } else {
-            this.carouselPosition = clampedPosition;
-        }
-        
-        this.lastPosition = this.carouselPosition;
-        this.lastFrameTime = elapsed;
-        this.updateCarouselPosition();
-        
-        // Continue animation
-        this.carouselAnimationFrame = requestAnimationFrame(() => this.animateCarousel());
-    }
 
     onCarouselComplete() {
-        console.log('🎰 Carousel spin complete');
+        console.log('🎭 Cover Flow spin complete');
         
         // Display the selected game
         setTimeout(() => {
             this.displaySelectedGame(this.carouselSelectedGame);
-        }, 500);
+        }, 300);
     }
 
     stopCarouselSpin() {
-        if (this.carouselAnimationFrame) {
-            cancelAnimationFrame(this.carouselAnimationFrame);
-            this.carouselAnimationFrame = null;
+        this.isSpinning = false;
+        if (this.flipsterElement) {
+            this.flipsterElement.classList.remove('spinning');
         }
-        this.carouselIsSpinning = false;
     }
 }
 

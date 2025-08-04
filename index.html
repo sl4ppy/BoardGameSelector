@@ -20,8 +20,8 @@
     <link rel="stylesheet" href="style.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     
-    <!-- Swiper CSS -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css">
+    <!-- Flipster CSS for Cover Flow -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jquery.flipster@1.1.6/dist/jquery.flipster.min.css">
 </head>
 <body>
     <div class="container">
@@ -191,19 +191,12 @@
                     </div>
                 </div>
 
-                <!-- Game Carousel Spinner -->
-                <div class="game-carousel-container hidden" id="gameCarouselContainer">
-                    <div class="carousel-viewport">
-                        <div class="swiper" id="gameSwiper">
-                            <div class="swiper-wrapper" id="swiperWrapper">
-                                <!-- Game thumbnails will be dynamically inserted here as swiper-slide elements -->
-                            </div>
-                        </div>
-                        <div class="carousel-fade-left"></div>
-                        <div class="carousel-fade-right"></div>
-                        <div class="carousel-center-arrow">
-                            <div class="arrow-indicator">▼</div>
-                        </div>
+                <!-- Cover Flow Carousel -->
+                <div class="coverflow-carousel-container hidden" id="coverflowCarouselContainer">
+                    <div class="flipster" id="gameFlipster">
+                        <ul>
+                            <!-- Game thumbnails will be dynamically inserted here as li elements -->
+                        </ul>
                     </div>
                 </div>
 
@@ -342,8 +335,9 @@
         </footer>
     </div>
 
-    <!-- Swiper JS -->
-    <script src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js"></script>
+    <!-- jQuery and Flipster for Cover Flow -->
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jquery.flipster@1.1.6/dist/jquery.flipster.min.js"></script>
     
     <script src="api-client.js"></script>
     <script src="script.js"></script>
