@@ -3349,6 +3349,14 @@ class BoardGamePicker {
             return;
         }
         
+        // Check if Flipster CSS is loaded by testing for a known class
+        const testElement = document.createElement('div');
+        testElement.className = 'flipster';
+        document.body.appendChild(testElement);
+        const styles = window.getComputedStyle(testElement);
+        console.log('🎭 Flipster CSS check - position:', styles.position);
+        document.body.removeChild(testElement);
+        
         // Destroy existing instance if it exists
         if (this.flipsterInstance) {
             try {
@@ -3520,6 +3528,35 @@ window.debugBGP = {
             console.log('🎧 Manual Cover Flow test triggered');
             app.createTestCoverFlow();
         }
+    },
+    testBasicFlipster: () => {
+        console.log('🧪 Testing basic Flipster functionality...');
+        
+        // Create a minimal test structure
+        const testContainer = document.createElement('div');
+        testContainer.innerHTML = `
+            <div class="flipster-test" style="margin: 20px;">
+                <ul>
+                    <li style="width:100px;height:100px;background:red;display:flex;align-items:center;justify-content:center;color:white;">1</li>
+                    <li style="width:100px;height:100px;background:blue;display:flex;align-items:center;justify-content:center;color:white;">2</li>
+                    <li style="width:100px;height:100px;background:green;display:flex;align-items:center;justify-content:center;color:white;">3</li>
+                </ul>
+            </div>
+        `;
+        document.body.appendChild(testContainer);
+        
+        // Try to initialize Flipster on it
+        try {
+            $('.flipster-test').flipster();
+            console.log('🧪 Basic Flipster test: SUCCESS');
+        } catch (e) {
+            console.error('🧪 Basic Flipster test: FAILED', e);
+        }
+        
+        // Clean up after 5 seconds
+        setTimeout(() => {
+            document.body.removeChild(testContainer);
+        }, 5000);
     },
     testProxies: async () => {
         const app = window.boardGamePickerInstance;
