@@ -3230,8 +3230,8 @@ class BoardGamePicker {
         // Clear existing items
         flipsterUl.innerHTML = '';
 
-        // Create Cover Flow items (limit to reasonable number for performance)
-        const maxItems = Math.min(this.carouselGames.length, 20);
+        // Create Cover Flow items for all games
+        const maxItems = this.carouselGames.length;
         
         for (let i = 0; i < maxItems; i++) {
             const game = this.carouselGames[i];
@@ -3366,16 +3366,23 @@ class BoardGamePicker {
             }
         }
         
-        // Try the simplest possible Flipster initialization
+        // Initialize Flipster with basic Cover Flow settings
         try {
-            console.log('🎭 Attempting basic Flipster initialization...');
+            console.log('🎭 Attempting Flipster initialization with basic config...');
             
-            // Most basic initialization - no config options
-            $(this.flipsterElement).flipster();
+            // Basic config with looping enabled
+            $(this.flipsterElement).flipster({
+                style: 'coverflow',
+                spacing: -0.6,
+                loop: true,
+                keyboard: true,
+                touch: true,
+                click: 'center'
+            });
             
             // Retrieve instance
             this.flipsterInstance = $(this.flipsterElement).data('flipster');
-            console.log('🎭 Basic Flipster initialized, instance exists:', !!this.flipsterInstance);
+            console.log('🎭 Flipster initialized with looping, instance exists:', !!this.flipsterInstance);
             
         } catch (error) {
             console.error('🎭 Flipster initialization error:', error);
