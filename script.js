@@ -3563,46 +3563,82 @@ class BoardGamePicker {
         this.carouselSelectedGame = targetGame;
         console.log(`🎭 Will spin to ${targetGame.name} at index ${targetIndex}`);
         
-        // Determine spinning duration and pattern
-        const minSpins = 15; // Minimum items to spin through
-        const maxSpins = 30; // Maximum items to spin through  
-        const totalSpins = minSpins + Math.floor(Math.random() * (maxSpins - minSpins));
+        // Get current position or start from random position
+        let currentIndex = Math.floor(Math.random() * totalItems);
+        
+        // Calculate minimum spins before we can land on target
+        const minSpinsBeforeTarget = 20; // Minimum items to spin through for excitement
+        
+        // Calculate total distance to travel (ensuring we go around at least once)
+        let distanceToTarget;
+        if (currentIndex < targetIndex) {
+            // Target is ahead of us - we need to go to targetIndex (inclusive)
+            distanceToTarget = (targetIndex - currentIndex) + 1;
+        } else if (currentIndex > targetIndex) {
+            // Target is behind us, go around the loop - we need to reach targetIndex (inclusive)
+            distanceToTarget = (totalItems - currentIndex) + targetIndex + 1;
+        } else {
+            // We're already at the target, need to go around at least once
+            distanceToTarget = totalItems + 1;
+        }
+        
+        // Add extra full loops if we haven't spun enough
+        const totalDistance = distanceToTarget + (minSpinsBeforeTarget > distanceToTarget ? 
+            Math.ceil((minSpinsBeforeTarget - distanceToTarget) / totalItems) * totalItems : 0);
         
         let currentSpinCount = 0;
-        let currentIndex = Math.floor(Math.random() * totalItems); // Start from random position
+        let isSlowingDown = false;
+        
+        console.log(`🎭 Starting from index ${currentIndex}, target at ${targetIndex}`);
+        console.log(`🎭 Distance to target: ${distanceToTarget}, total distance: ${totalDistance}`);
         
         const spinStep = () => {
-            if (currentSpinCount >= totalSpins) {
-                // Final jump to exact target
-                console.log(`🎯 Spinning complete, jumping to target: ${targetGame.name}`);
-                $(this.flipsterElement).flipster('jump', targetIndex);
+            // Check if we should start slowing down (last 8-12 items)
+            const remainingSteps = totalDistance - currentSpinCount;
+            const slowDownZone = 8 + Math.random() * 4; // 8-12 items
+            
+            if (remainingSteps <= slowDownZone && !isSlowingDown) {
+                isSlowingDown = true;
+                console.log(`🎭 Starting to slow down, ${remainingSteps} steps remaining`);
+            }
+            
+            // Jump to current item in sequence
+            console.log(`🎭 Jumping to index ${currentIndex} (step ${currentSpinCount + 1}/${totalDistance})`);
+            $(this.flipsterElement).flipster('jump', currentIndex);
+            
+            // Move to next position
+            currentIndex = (currentIndex + 1) % totalItems;
+            currentSpinCount++;
+            
+            // Check if we've reached the target (after the jump and increment)
+            if (currentSpinCount >= totalDistance) {
+                const finalPosition = (currentIndex - 1 + totalItems) % totalItems;
+                console.log(`🎯 Spinning complete! Final position: ${finalPosition}, target was: ${targetIndex}`);
+                console.log(`🎯 Landed on game: ${targetGame.name}`);
+                
+                // Verify we're actually on the right game
+                const actualGameId = items[finalPosition]?.dataset.gameId;
+                const actualGame = this.carouselGames.find(g => g.id == actualGameId);
+                console.log(`🎯 Actual game at final position: ${actualGame?.name} (ID: ${actualGameId})`);
                 
                 setTimeout(() => {
                     this.flipsterElement.classList.remove('spinning');
                     this.isSpinning = false;
                     this.onCarouselComplete();
-                }, 600);
+                }, 300);
                 return;
             }
             
-            // Jump to next item in sequence
-            $(this.flipsterElement).flipster('jump', currentIndex);
-            currentIndex = (currentIndex + 1) % totalItems;
-            currentSpinCount++;
-            
-            // Calculate delay - start fast, slow down at the end
-            const progress = currentSpinCount / totalSpins;
+            // Calculate delay based on phase
             let delay;
             
-            if (progress < 0.7) {
-                // Fast spinning for first 70%
-                delay = 50;
-            } else if (progress < 0.9) {
-                // Medium speed for next 20%
-                delay = 100;
+            if (!isSlowingDown) {
+                // Fast spinning phase - much faster!
+                delay = 20 + Math.random() * 15; // 20-35ms for variety
             } else {
-                // Slow down for final 10%
-                delay = 200 + (progress - 0.9) * 1000; // 200ms to 300ms
+                // Slowing down phase - gradually increase delay
+                const slowProgress = (slowDownZone - (totalDistance - currentSpinCount)) / slowDownZone;
+                delay = 35 + (slowProgress * 150); // 35ms to 185ms
             }
             
             setTimeout(spinStep, delay);
