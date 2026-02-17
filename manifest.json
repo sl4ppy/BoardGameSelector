@@ -4,8 +4,8 @@
   "description": "Intelligently select your next board game from your BoardGameGeek collection",
   "start_url": "./",
   "display": "standalone",
-  "background_color": "#1a1c1f",
-  "theme_color": "#1a1c1f",
+  "background_color": "#1c1d21",
+  "theme_color": "#1c1d21",
   "orientation": "portrait-primary",
   "categories": ["games", "entertainment", "productivity"],
   "icons": [
@@ -34,13 +34,7 @@
       "name": "Quick Roll",
       "short_name": "Roll",
       "description": "Roll for a random game",
-      "url": "/?action=quick-roll",
-      "icons": [
-        {
-          "src": "/spin-icon.svg",
-          "sizes": "96x96"
-        }
-      ]
+      "url": "/?action=quick-roll"
     }
   ]
 }

@@ -240,7 +240,7 @@ class BoardGamePicker {
             this.updateDevPanelInfo();
             
             // Update dev panel periodically to show rate limit countdown
-            setInterval(() => {
+            this._devPanelIntervalId = setInterval(() => {
                 this.updateDevPanelInfo();
             }, 5000); // Update every 5 seconds
             
@@ -1175,7 +1175,7 @@ class BoardGamePicker {
             yearPublished: item.querySelector('yearpublished')?.textContent || 'Unknown',
             owned: item.getAttribute('subtype') === 'boardgame' && item.querySelector('status[own="1"]') !== null,
             wishlist: item.querySelector('status[wishlist="1"]') !== null,
-            rating: parseFloat(item.querySelector('stats rating[value]')?.getAttribute('value') || '0'), // User's personal rating
+            personalRating: parseFloat(item.querySelector('stats rating[value]')?.getAttribute('value') || '0'), // User's personal rating
             numPlays: parseInt(item.querySelector('numplays')?.textContent || '0'),
         };
 
@@ -1488,16 +1488,16 @@ class BoardGamePicker {
 
             // Unrated games filter (independent of personal rating system)
             // Check for unrated games: rating is 0, null, undefined, NaN, or any other falsy value
-            const isUnrated = !game.rating || game.rating === 0 || isNaN(game.rating);
+            const isUnrated = !game.personalRating || game.personalRating === 0 || isNaN(game.personalRating);
             if (isUnrated && !this.includeUnrated) {
-                console.log(`🚫 Filtering out unrated game: ${game.name} (rating: ${game.rating})`);
+                console.log(`🚫 Filtering out unrated game: ${game.name} (rating: ${game.personalRating})`);
                 return false;
             }
 
             // Personal rating filters (only apply if personal rating system is enabled)
             if (this.usePersonalRating) {
                 // If game has a rating, check if it meets minimum threshold
-                if (game.rating > 0 && game.rating < this.minPersonalRating) {
+                if (game.personalRating > 0 && game.personalRating < this.minPersonalRating) {
                     return false;
                 }
             }
@@ -1588,26 +1588,26 @@ class BoardGamePicker {
         }
         
         // Add rating info
-        const ratedGames = this.filteredGames.filter(g => g.rating && g.rating > 0 && !isNaN(g.rating)).length;
-        const unratedGames = this.filteredGames.filter(g => !g.rating || g.rating === 0 || isNaN(g.rating)).length;
-        
+        const ratedGames = this.filteredGames.filter(g => g.personalRating && g.personalRating > 0 && !isNaN(g.personalRating)).length;
+        const unratedGames = this.filteredGames.filter(g => !g.personalRating || g.personalRating === 0 || isNaN(g.personalRating)).length;
+
         if (this.usePersonalRating) {
             // Personal rating system is enabled
-            const qualifyingRatedGames = this.filteredGames.filter(g => g.rating >= this.minPersonalRating).length;
-            const avgRating = ratedGames > 0 ? 
-                (this.filteredGames.filter(g => g.rating && g.rating > 0 && !isNaN(g.rating)).reduce((sum, g) => sum + g.rating, 0) / ratedGames).toFixed(1) :
+            const qualifyingRatedGames = this.filteredGames.filter(g => g.personalRating >= this.minPersonalRating).length;
+            const avgRating = ratedGames > 0 ?
+                (this.filteredGames.filter(g => g.personalRating && g.personalRating > 0 && !isNaN(g.personalRating)).reduce((sum, g) => sum + g.personalRating, 0) / ratedGames).toFixed(1) :
                 'N/A';
-            
+
             let ratingInfo = `Personal ratings active: ${qualifyingRatedGames} meet min ${this.minPersonalRating}★`;
             if (this.includeUnrated && unratedGames > 0) {
                 ratingInfo += `, ${unratedGames} unrated included`;
             }
             ratingInfo += ` (avg rated: ${avgRating})`;
-            
+
             infoText += ` • ${ratingInfo}`;
         } else if (!this.includeUnrated && unratedGames > 0) {
             // Personal rating system is disabled, but unrated games are being filtered out
-            const totalUnratedGames = this.games.filter(g => !g.rating || g.rating === 0 || isNaN(g.rating)).length;
+            const totalUnratedGames = this.games.filter(g => !g.personalRating || g.personalRating === 0 || isNaN(g.personalRating)).length;
             infoText += ` • Excluding ${totalUnratedGames - unratedGames} unrated games`;
         }
         
@@ -1726,8 +1726,8 @@ class BoardGamePicker {
         }
         
         // Apply personal rating multiplier if enabled
-        if (this.usePersonalRating && game.rating && game.rating > 0 && !isNaN(game.rating)) {
-            const ratingMultiplier = this.calculateRatingWeight(game.rating);
+        if (this.usePersonalRating && game.personalRating && game.personalRating > 0 && !isNaN(game.personalRating)) {
+            const ratingMultiplier = this.calculateRatingWeight(game.personalRating);
             return baseWeight * ratingMultiplier;
         }
         
@@ -1803,9 +1803,9 @@ class BoardGamePicker {
         
         // Update ratings
         const personalRatingElement = document.getElementById('gamePersonalRating');
-        if (game.rating && game.rating > 0 && !isNaN(game.rating)) {
-            personalRatingElement.textContent = `⭐ ${game.rating.toFixed(1)}/10`;
-            personalRatingElement.title = `Your personal rating: ${game.rating.toFixed(1)} out of 10`;
+        if (game.personalRating && game.personalRating > 0 && !isNaN(game.personalRating)) {
+            personalRatingElement.textContent = `⭐ ${game.personalRating.toFixed(1)}/10`;
+            personalRatingElement.title = `Your personal rating: ${game.personalRating.toFixed(1)} out of 10`;
         } else {
             personalRatingElement.textContent = 'Not rated';
             personalRatingElement.title = 'You have not rated this game yet';
@@ -2029,6 +2029,18 @@ class BoardGamePicker {
         statusElement.style.display = 'block';
     }
 
+    showStatusMessage(message, type) {
+        this.showCollectionStatus(message, type);
+        if (type !== 'error') {
+            setTimeout(() => {
+                const statusElement = document.getElementById('collectionStatus');
+                if (statusElement.textContent === message) {
+                    statusElement.style.display = 'none';
+                }
+            }, 3000);
+        }
+    }
+
     toggleLoadingState(loading) {
         const fetchBtn = document.getElementById('fetchCollection');
         const spinner = fetchBtn.querySelector('.spinner');
@@ -2059,7 +2071,7 @@ class BoardGamePicker {
         }
         
         // Periodically check proxy health
-        setInterval(() => this.checkAllProxyHealth(), this.proxyHealthCheckInterval);
+        this._proxyHealthIntervalId = setInterval(() => this.checkAllProxyHealth(), this.proxyHealthCheckInterval);
     }
     
     updateProxyHealth(proxyName, success) {
@@ -2370,7 +2382,7 @@ class BoardGamePicker {
                 });
                 
                 // Check for updates every hour
-                setInterval(() => {
+                this._swUpdateIntervalId = setInterval(() => {
                     registration.update();
                 }, 3600000);
                 
@@ -3021,15 +3033,15 @@ class BoardGamePicker {
     }
 
     formatUserRating(game) {
-        if (game.userRating && game.userRating > 0) {
-            return `⭐ ${game.userRating.toFixed(1)}`;
+        if (game.personalRating && game.personalRating > 0) {
+            return `⭐ ${game.personalRating.toFixed(1)}`;
         }
         return 'Unrated';
     }
 
     formatBggRating(game) {
-        if (game.rating && game.rating > 0) {
-            return game.rating.toFixed(1);
+        if (game.bggRating && game.bggRating > 0) {
+            return game.bggRating.toFixed(1);
         }
         return 'N/A';
     }
@@ -3070,13 +3082,18 @@ class BoardGamePicker {
 
     initializeTableSorting() {
         const table = document.getElementById('collectionTable');
-        const headers = table.querySelectorAll('th.sortable');
-        
-        headers.forEach(header => {
-            header.addEventListener('click', () => {
+        const thead = table.querySelector('thead');
+
+        // Use event delegation to avoid stacking listeners on repeated calls
+        if (this._tableSortingInitialized) return;
+        this._tableSortingInitialized = true;
+
+        thead.addEventListener('click', (e) => {
+            const header = e.target.closest('th.sortable');
+            if (header) {
                 const column = header.dataset.column;
                 this.sortTable(column, header);
-            });
+            }
         });
     }
 

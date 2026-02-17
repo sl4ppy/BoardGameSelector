@@ -1,15 +1,31 @@
 // Board Game Picker Service Worker
-const CACHE_NAME = 'bgg-picker-v1.6.1';
-const STATIC_CACHE = 'bgg-picker-static-v1.6.1';
+const CACHE_NAME = 'bgg-picker-v3.0.0';
+const STATIC_CACHE = 'bgg-picker-static-v3.0.0';
 
 // Files to cache for offline functionality
 const STATIC_FILES = [
     './',
     './index.html',
     './style.css',
-    './script.js',
+    './api-client.js',
+    './js/app.js',
+    './js/modules/logger.js',
+    './js/modules/events.js',
+    './js/modules/dom.js',
+    './js/modules/state.js',
+    './js/modules/cache.js',
+    './js/modules/api-proxy.js',
+    './js/modules/bgg-api.js',
+    './js/modules/filters.js',
+    './js/modules/weighting.js',
+    './js/modules/carousel.js',
+    './js/modules/game-display.js',
+    './js/modules/table.js',
+    './js/modules/modals.js',
+    './js/modules/export.js',
+    './js/modules/pwa.js',
     './manifest.json',
-    'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap'
+    'https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:opsz,wght@14..32,300..800&display=swap'
 ];
 
 // BGG API patterns to cache (including all CORS proxies)
@@ -122,10 +138,14 @@ async function networkFirstWithCache(request) {
         
         const cachedResponse = await caches.match(request);
         if (cachedResponse) {
-            // Add offline indicator header
-            const offlineResponse = cachedResponse.clone();
-            offlineResponse.headers.set('X-Served-From', 'cache');
-            return offlineResponse;
+            // Create new Response with offline indicator (cached responses have immutable headers)
+            const headers = new Headers(cachedResponse.headers);
+            headers.set('X-Served-From', 'cache');
+            return new Response(cachedResponse.body, {
+                status: cachedResponse.status,
+                statusText: cachedResponse.statusText,
+                headers
+            });
         }
         
         return new Response(
@@ -157,13 +177,16 @@ async function networkFirst(request) {
 
 // Utility functions
 function isStaticFile(url) {
+    // Check external font hosts by hostname (not pathname)
+    if (url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com') {
+        return true;
+    }
     const pathname = url.pathname;
-    return pathname === '/' || 
+    return pathname === '/' ||
            pathname.endsWith('.html') ||
            pathname.endsWith('.css') ||
            pathname.endsWith('.js') ||
-           pathname.endsWith('.json') ||
-           pathname.includes('fonts.googleapis.com');
+           pathname.endsWith('.json');
 }
 
 function isBGGApiCall(url) {
@@ -206,8 +229,8 @@ self.addEventListener('push', event => {
         
         const options = {
             body: data.body,
-            icon: './icon-192.png',
-            badge: './badge-72.png',
+            icon: './favicon.png',
+            badge: './favicon.png',
             vibrate: [100, 50, 100],
             data: data.data,
             actions: [

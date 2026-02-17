@@ -3,42 +3,42 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Board Game Picker — intelligently select your next board game from your BoardGameGeek collection with weighted random selection, filters, and analytics.">
     <title>Board Game Picker</title>
-    
+
     <!-- PWA Manifest -->
     <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" content="#1a1c1f">
-    <meta name="background-color" content="#1a1c1f">
-    
+    <meta name="theme-color" content="#1c1d21">
+    <meta name="background-color" content="#1c1d21">
+
     <!-- iOS PWA Support -->
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="BGG Picker">
     <link rel="apple-touch-icon" href="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTkyIiBoZWlnaHQ9IjE5MiIgdmlld0JveD0iMCAwIDE5MiAxOTIiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIxOTIiIGhlaWdodD0iMTkyIiByeD0iMjQiIGZpbGw9InVybCgjZ3JhZGllbnQwX2xpbmVhcl8xXzEpIi8+CjxwYXRoIGQ9Ik05NiA2NEw4MCA4MEw5NiA5NkwxMTIgODBaIiBmaWxsPSJ3aGl0ZSIvPgo8cGF0aCBkPSJNOTYgMTA0TDgwIDEyMEw5NiAxMzZMMTEyIDEyMFoiIGZpbGw9IndoaXRlIi8+CjxwYXRoIGQ9Ik02NCA5Nkw0OCAxMTJMNjQgMTI4TDgwIDExMloiIGZpbGw9IndoaXRlIi8+CjxwYXRoIGQ9Ik0xMjggOTZMMTEyIDExMkwxMjggMTI4TDE0NCAxMTJaIiBmaWxsPSJ3aGl0ZSIvPgo8cGF0aCBkPSJNNzIgNzJMNTYgODhMNzIgMTA0TDg4IDg4WiIgZmlsbD0id2hpdGUiLz4KPHA+cGF0aCBkPSJNMTIwIDcyTDEwNCA4OEwxMjAgMTA0TDEzNiA4OFoiIGZpbGw9IndoaXRlIi8+CjxkZWZzPgo8bGluZWFyR3JhZGllbnQgaWQ9ImdyYWRpZW50MF9saW5lYXJfMV8xIiB4MT0iMCIgeTE9IjAiIHgyPSIxOTIiIHkyPSIxOTIiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KPHN0b3Agc3RvcC1jb2xvcj0iIzY2N0VFQSIvPgo8c3RvcCBvZmZzZXQ9IjAuNSIgc3RvcC1jb2xvcj0iIzc2NEJBMiIvPgo8c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiNGMDkzRkIiLz4KPC9saW5lYXJHcmFkaWVudD4KPC9kZWZzPgo8L3N2Zz4K">
-    
+
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎮</text></svg>">
     <link rel="stylesheet" href="style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    
-    <!-- Flipster CSS for Cover Flow -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jquery.flipster@1.1.6/dist/jquery.flipster.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:opsz,wght@14..32,300..800&display=swap" rel="stylesheet">
 </head>
 <body>
+    <a href="#main" class="skip-link">Skip to main content</a>
+
     <div class="container">
         <header class="header">
-            <h1 class="title">🎮 Board Game Picker</h1>
-            <p class="subtitle">Discover your next board game adventure</p>
+            <h1 class="title"><span class="title-accent">Board Game</span> Picker</h1>
+            <p class="subtitle">Discover your next adventure</p>
         </header>
 
-        <main class="main">
+        <main class="main" id="main">
             <!-- Username Input Section -->
-            <section class="username-section" id="usernameSection">
+            <section class="username-section" id="usernameSection" aria-label="Search">
                 <div class="input-group">
-                    <label for="bggUsername" class="input-label">Board Game Geek Username</label>
+                    <label for="bggUsername" class="input-label">BoardGameGeek Username</label>
                     <div class="input-wrapper">
-                        <input 
-                            type="text" 
-                            id="bggUsername" 
+                        <input
+                            type="text"
+                            id="bggUsername"
                             class="username-input"
                             placeholder="Enter your BGG username"
                             autocomplete="off"
@@ -55,8 +55,8 @@
                             <span class="btn-text">Full Sync</span>
                             <div class="spinner hidden"></div>
                         </button>
-                        <button class="settings-btn" onclick="window.boardGamePickerInstance?.showAdvancedSettings()" title="Advanced Settings">
-                            ⚙️
+                        <button class="settings-btn" title="Advanced Settings" aria-label="Advanced Settings">
+                            <span aria-hidden="true">⚙️</span>
                         </button>
                     </div>
                 </div>
@@ -65,18 +65,19 @@
                     <div class="user-sync-status" id="userSyncStatus"></div>
                 </div>
 
-                <div class="collection-status" id="collectionStatus"></div>
+                <div class="collection-status" id="collectionStatus" aria-live="polite"></div>
             </section>
 
             <!-- Game Selection Section -->
-            <section class="game-section hidden" id="gameSection">
+            <section class="game-section hidden" id="gameSection" aria-label="Game selection">
                 <div class="controls-panel">
                     <h2 class="section-title">Filter Your Collection</h2>
-                    
-                    <div class="filters">
-                        <div class="filter-group">
-                            <label class="filter-label">Player Count</label>
-                            <div class="filter-options">
+
+                    <fieldset class="filters-fieldset">
+                        <legend class="visually-hidden">Game filters</legend>
+                        <div class="filters">
+                            <div class="filter-group">
+                                <label for="playerCount" class="filter-label">Player Count</label>
                                 <select id="playerCount" class="filter-select">
                                     <option value="">Any players</option>
                                     <option value="1">1 player</option>
@@ -86,11 +87,9 @@
                                     <option value="5">5+ players</option>
                                 </select>
                             </div>
-                        </div>
 
-                        <div class="filter-group">
-                            <label class="filter-label">Play Time (minutes)</label>
-                            <div class="filter-options">
+                            <div class="filter-group">
+                                <label for="playTime" class="filter-label">Play Time</label>
                                 <select id="playTime" class="filter-select">
                                     <option value="">Any duration</option>
                                     <option value="0-30">Quick (0-30 min)</option>
@@ -99,11 +98,9 @@
                                     <option value="120+">Epic (2+ hours)</option>
                                 </select>
                             </div>
-                        </div>
 
-                        <div class="filter-group">
-                            <label class="filter-label">Complexity</label>
-                            <div class="filter-options">
+                            <div class="filter-group">
+                                <label for="complexity" class="filter-label">Complexity</label>
                                 <select id="complexity" class="filter-select">
                                     <option value="">Any complexity</option>
                                     <option value="1-2">Light (1-2)</option>
@@ -112,11 +109,9 @@
                                     <option value="4-5">Very Heavy (4-5)</option>
                                 </select>
                             </div>
-                        </div>
 
-                        <div class="filter-group">
-                            <label class="filter-label">Game Type</label>
-                            <div class="filter-options">
+                            <div class="filter-group">
+                                <label for="gameType" class="filter-label">Game Type</label>
                                 <select id="gameType" class="filter-select">
                                     <option value="">All games</option>
                                     <option value="owned">Owned only</option>
@@ -124,79 +119,77 @@
                                 </select>
                             </div>
                         </div>
-                    </div>
+                    </fieldset>
 
                     <div class="roll-section">
                         <div class="weighting-options">
                             <label class="filter-label">Selection Method</label>
-                            <div class="weight-buttons">
+                            <div class="weight-buttons" role="group" aria-label="Selection method">
                                 <button id="weightRandom" class="weight-btn active" data-weight="random">
-                                    <span class="weight-icon">⚖️</span>
+                                    <span class="weight-icon" aria-hidden="true">⚖️</span>
                                     <span class="weight-text">Random</span>
                                 </button>
                                 <button id="weightRecency" class="weight-btn" data-weight="recency">
-                                    <span class="weight-icon">⏰</span>
+                                    <span class="weight-icon" aria-hidden="true">⏰</span>
                                     <span class="weight-text">Favor Old</span>
                                 </button>
                                 <button id="weightUnplayed" class="weight-btn" data-weight="unplayed">
-                                    <span class="weight-icon">✨</span>
+                                    <span class="weight-icon" aria-hidden="true">✨</span>
                                     <span class="weight-text">Favor Unplayed</span>
                                 </button>
                             </div>
-                            
+
                             <div class="rating-option">
                                 <label class="rating-checkbox-wrapper">
                                     <input type="checkbox" id="usePersonalRating" class="rating-checkbox">
                                     <span class="rating-checkmark"></span>
-                                    <span class="rating-label">📊 Use personal rating when choosing a game</span>
+                                    <span class="rating-label">Use personal rating when choosing a game</span>
                                 </label>
                                 <p class="rating-description">Factor in your personal rating for each game when applying weights</p>
-                                
+
                                 <div class="rating-slider-wrapper hidden" id="ratingSliderWrapper">
-                                    <label class="rating-slider-label">
-                                        ⭐ Minimum Personal Rating: <span id="ratingSliderValue">5</span>/10
+                                    <label for="minPersonalRating" class="rating-slider-label">
+                                        Minimum Personal Rating: <span id="ratingSliderValue">5</span>/10
                                     </label>
                                     <div class="rating-slider-container">
                                         <span class="slider-min">1</span>
-                                        <input type="range" id="minPersonalRating" class="rating-slider" 
+                                        <input type="range" id="minPersonalRating" class="rating-slider"
                                                min="1" max="10" value="5" step="0.5">
                                         <span class="slider-max">10</span>
                                     </div>
                                     <p class="rating-slider-description">Only consider games with this rating or higher</p>
-                                    
+
                                     <div class="unrated-option">
                                         <label class="unrated-checkbox-wrapper">
                                             <input type="checkbox" id="includeUnrated" class="unrated-checkbox" checked>
                                             <span class="unrated-checkmark"></span>
-                                            <span class="unrated-label">🔍 Include unrated games</span>
+                                            <span class="unrated-label">Include unrated games</span>
                                         </label>
                                         <p class="unrated-description">Include games you haven't rated yet in the selection</p>
                                     </div>
                                 </div>
                             </div>
                         </div>
-                        
+
                         <button id="rollDice" class="roll-btn">
-                            <span class="spin-icon">🎰</span>
+                            <span class="spin-icon" aria-hidden="true">🎰</span>
                             <span class="btn-text">Spin the Wheel!</span>
                         </button>
-                        
+
                         <button id="toggleTable" class="toggle-table-btn" style="display: none;">
-                            <span class="table-icon">📋</span>
+                            <span class="table-icon" aria-hidden="true">📋</span>
                             <span class="btn-text">Show Collection Table</span>
                         </button>
-                        
-                        <div class="filtered-count" id="filteredCount"></div>
+
+                        <div class="filtered-count" id="filteredCount" aria-live="polite"></div>
                         <div class="weight-info" id="weightInfo"></div>
                     </div>
                 </div>
 
                 <!-- Cover Flow Carousel -->
-                <div class="coverflow-carousel-container hidden" id="coverflowCarouselContainer">
-                    <div class="flipster" id="gameFlipster">
-                        <ul>
-                            <!-- Game thumbnails will be dynamically inserted here as li elements -->
-                        </ul>
+                <div class="coverflow-carousel-container hidden" id="coverflowCarouselContainer" aria-label="Game carousel">
+                    <div class="carousel-track" id="carouselTrack">
+                        <!-- Carousel items dynamically inserted by GameCarousel -->
                     </div>
                 </div>
 
@@ -204,7 +197,7 @@
                 <div class="game-display" id="gameDisplay">
                     <div class="game-card hidden" id="gameCard">
                         <div class="game-image-container">
-                            <img id="gameImage" class="game-image" alt="Game cover">
+                            <img id="gameImage" class="game-image" alt="Selected board game cover" loading="lazy">
                             <div class="image-loader">
                                 <div class="spinner"></div>
                             </div>
@@ -213,40 +206,40 @@
                             <h3 id="gameName" class="game-name"></h3>
                             <div class="game-details">
                                 <div class="detail-item">
-                                    <span class="detail-label">Year:</span>
+                                    <span class="detail-label">Year</span>
                                     <span id="gameYear" class="detail-value"></span>
                                 </div>
                                 <div class="detail-item">
-                                    <span class="detail-label">Players:</span>
+                                    <span class="detail-label">Players</span>
                                     <span id="gamePlayers" class="detail-value"></span>
                                 </div>
                                 <div class="detail-item">
-                                    <span class="detail-label">Play Time:</span>
+                                    <span class="detail-label">Play Time</span>
                                     <span id="gamePlayTime" class="detail-value"></span>
                                 </div>
                                 <div class="detail-item">
-                                    <span class="detail-label">Complexity:</span>
+                                    <span class="detail-label">Complexity</span>
                                     <span id="gameComplexity" class="detail-value"></span>
                                 </div>
                                 <div class="detail-item">
-                                    <span class="detail-label">Your Rating:</span>
+                                    <span class="detail-label">Your Rating</span>
                                     <span id="gamePersonalRating" class="detail-value"></span>
                                 </div>
                                 <div class="detail-item">
-                                    <span class="detail-label">BGG Rating:</span>
+                                    <span class="detail-label">BGG Rating</span>
                                     <span id="gameBggRating" class="detail-value"></span>
                                 </div>
                                 <div class="detail-item">
-                                    <span class="detail-label">Plays:</span>
+                                    <span class="detail-label">Plays</span>
                                     <span id="gameNumPlays" class="detail-value"></span>
                                 </div>
                                 <div class="detail-item">
-                                    <span class="detail-label">Last Played:</span>
+                                    <span class="detail-label">Last Played</span>
                                     <span id="gameLastPlayed" class="detail-value" title="Play dates are fetched from BGG's play log"></span>
                                 </div>
                             </div>
                             <div class="game-actions">
-                                <a id="bggLink" href="#" target="_blank" class="bgg-link">View on BGG</a>
+                                <a id="bggLink" href="#" target="_blank" rel="noopener" class="bgg-link">View on BGG</a>
                                 <button id="rollAgain" class="roll-again-btn">Roll Again</button>
                             </div>
                         </div>
@@ -256,42 +249,43 @@
                 <!-- Collection Table -->
                 <div class="collection-table-container hidden" id="collectionTableContainer">
                     <div class="table-header">
-                        <h3>📋 Complete Collection</h3>
+                        <h3>Complete Collection</h3>
                         <div class="table-stats" id="tableStats"></div>
                     </div>
                     <div class="table-wrapper">
                         <table class="collection-table" id="collectionTable">
+                            <caption class="visually-hidden">Your board game collection with sorting</caption>
                             <thead>
                                 <tr>
-                                    <th class="sortable" data-column="name">
+                                    <th scope="col" class="sortable" data-column="name">
                                         <span class="sort-header">Title</span>
                                         <span class="sort-indicator"></span>
                                     </th>
-                                    <th class="sortable" data-column="yearPublished">
+                                    <th scope="col" class="sortable" data-column="yearPublished">
                                         <span class="sort-header">Year</span>
                                         <span class="sort-indicator"></span>
                                     </th>
-                                    <th class="sortable" data-column="players">
+                                    <th scope="col" class="sortable" data-column="players">
                                         <span class="sort-header">Players</span>
                                         <span class="sort-indicator"></span>
                                     </th>
-                                    <th class="sortable" data-column="playTime">
+                                    <th scope="col" class="sortable" data-column="playTime">
                                         <span class="sort-header">Play Time</span>
                                         <span class="sort-indicator"></span>
                                     </th>
-                                    <th class="sortable" data-column="userRating">
+                                    <th scope="col" class="sortable" data-column="userRating">
                                         <span class="sort-header">My Rating</span>
                                         <span class="sort-indicator"></span>
                                     </th>
-                                    <th class="sortable" data-column="rating">
+                                    <th scope="col" class="sortable" data-column="rating">
                                         <span class="sort-header">BGG Rating</span>
                                         <span class="sort-indicator"></span>
                                     </th>
-                                    <th class="sortable" data-column="numPlays">
+                                    <th scope="col" class="sortable" data-column="numPlays">
                                         <span class="sort-header">Plays</span>
                                         <span class="sort-indicator"></span>
                                     </th>
-                                    <th class="sortable" data-column="lastPlayed">
+                                    <th scope="col" class="sortable" data-column="lastPlayed">
                                         <span class="sort-header">Last Played</span>
                                         <span class="sort-indicator"></span>
                                     </th>
@@ -308,7 +302,7 @@
 
         <!-- Developer Panel (only visible when running locally) -->
         <div class="dev-panel hidden" id="devPanel">
-            <h3 class="dev-panel-title">🛠️ Developer Tools</h3>
+            <h3 class="dev-panel-title">Developer Tools</h3>
             <div class="dev-panel-content">
                 <div class="dev-panel-info" id="devPanelInfo"></div>
                 <div class="dev-panel-actions">
@@ -326,20 +320,18 @@
 
         <footer class="footer">
             <div class="footer-content">
-                <p>Data provided by <a href="https://boardgamegeek.com" target="_blank">BoardGameGeek</a></p>
+                <p>Data provided by <a href="https://boardgamegeek.com" target="_blank" rel="noopener">BoardGameGeek</a></p>
                 <div class="footer-credits">
-                    <p>&copy; 2025 Created by <strong>Chris Van Doren</strong></p>
-                    <p class="footer-tools">Built with <a href="https://cursor.com" target="_blank">Cursor</a> and <a href="https://claude.ai" target="_blank">Claude AI</a></p>
+                    <p>&copy; 2026 Created by <strong>Chris Van Doren</strong></p>
+                    <p class="footer-tools">Built with <a href="https://cursor.com" target="_blank" rel="noopener">Cursor</a> and <a href="https://claude.ai" target="_blank" rel="noopener">Claude AI</a></p>
                 </div>
             </div>
         </footer>
     </div>
 
-    <!-- jQuery and Flipster for Cover Flow -->
-    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/jquery.flipster@1.1.6/dist/jquery.flipster.min.js"></script>
-    
+    <!-- Backend API client (non-module, sets window.apiClient) -->
     <script src="api-client.js"></script>
-    <script src="script.js"></script>
+    <!-- ES Modules entry point -->
+    <script type="module" src="js/app.js"></script>
 </body>
-</html> 
+</html>

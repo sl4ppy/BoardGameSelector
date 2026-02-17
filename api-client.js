@@ -6,31 +6,29 @@ class ApiClient {
         // Detect if we're running with a backend server
         this.baseUrl = window.location.origin;
         this.hasBackend = false;
-        this.backendChecked = false;
-        
-        // Check if backend is available
-        this.checkBackendAvailability();
+
+        // Promise-based initialization (replaces busy-wait polling)
+        this._readyPromise = this._checkBackendAvailability();
     }
-    
-    async checkBackendAvailability() {
+
+    async _checkBackendAvailability() {
         try {
             const response = await fetch(`${this.baseUrl}/api/health`);
             if (response.ok) {
                 this.hasBackend = true;
-                console.log('✅ Backend server detected at', this.baseUrl);
+                console.log('Backend server detected at', this.baseUrl);
             }
         } catch (error) {
-            console.log('📡 No backend server detected, using direct BGG API');
-        } finally {
-            this.backendChecked = true;
+            console.log('No backend server detected, using direct BGG API');
         }
     }
-    
+
+    async ensureReady() {
+        await this._readyPromise;
+    }
+
     async fetchCollection(username, forceRefresh = false) {
-        // Wait for backend check to complete if it hasn't yet
-        while (!this.backendChecked) {
-            await new Promise(resolve => setTimeout(resolve, 10));
-        }
+        await this.ensureReady();
         
         if (!this.hasBackend) {
             console.log('❌ No backend available, falling back to direct BGG API');
